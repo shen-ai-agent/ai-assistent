@@ -518,7 +518,7 @@
       <li><b>Prompt là đòn bẩy chính:</b> thuật ngữ có trong prompt đúng 92%, không có thì khoảng 59%. Whisper chỉ giữ khoảng 223 token prompt nên phải chia glossary theo chủ đề.</li>
       <li><b>Ép <code>vi</code> không làm hỏng câu tiếng Anh:</b> ép <code>en</code> cũng cho WER en 14.9%. Lỗi nhóm en đến từ phát âm ("word"→"world", "chart"→"chair"). Có thể tận dụng để nhận xét phát âm ở Phase 5.</li>
       <li><b>Corrections:</b> dev không có lỗi nào lặp ≥2 lần nên chưa thêm rule. Xây từ log dùng thật ở Phase 2.</li>
-      <li><b>Chưa đạt:</b> WER en 14.9% (mục tiêu 10%); term recall mix 88.8% (mục tiêu 90%, sát).</li>
+      <li><b>Chốt 15/10/2026:</b> hạ mục tiêu WER en xuống ≤15% (đạt 14.9%); term recall mix 88.8% coi là đạt vì nằm trong sai số của holdout 30 câu. Phase 1 ✅.</li>
     </ul>
   </div>
 
@@ -557,16 +557,18 @@
       <li>Log mỗi lượt vào <code>_local/logs/</code></li></ul></div>
   </div>
 
-  <h3>Protocol WebSocket (bản đầu)</h3>
+  <h3>Protocol WebSocket</h3>
 <pre>Client → Server
-  {"type": "start"}                       bắt đầu một lượt nói
-  &lt;binary&gt;                                PCM int16, 16kHz, mono, ~100ms/frame
-  {"type": "stop"}                        kết thúc lượt nói
-  {"type": "cancel"}                      huỷ lượt hiện tại
+  {"type": "start", "topic": "AWS" | null}   bắt đầu một lượt nói; null = server tự đoán chủ đề
+  &lt;binary&gt;                                   PCM int16, 16kHz, mono, ~100ms/frame
+  {"type": "stop"}                           kết thúc lượt nói
+  {"type": "cancel"}                         huỷ lượt hiện tại
+  {"type": "correction", "turn_id", "text"}  người dùng sửa tay transcript (ghi log, T-003)
 
 Server → Client
+  {"type": "hello", "topics": [...], "model": "large-v3", "sample_rate": 16000}
   {"type": "state", "value": "TRANSCRIBING"}
-  {"type": "transcript", "text": "...", "audio_ms": 8400, "stt_ms": 1350}
+  {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms": 8400, "stt_ms": 1350}
   {"type": "error", "code": "stt_failed", "message": "..."}</pre>
   <p style="font-size:14px;color:var(--muted)">Phase 3 và 4 sẽ thêm <code>audio_chunk</code>, <code>response_text</code>, <code>ask</code>. Mọi message định nghĩa ở <code>protocol.py</code>.</p>
 
@@ -597,6 +599,8 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">UI: chấm trạng thái có màu, mức âm lượng mic (để biết mic đang thu), transcript sửa tay được, độ trễ của lượt vừa rồi</span></label></li>
     <li><label><input type="checkbox"><span class="t">Tự kết nối lại WebSocket (backoff 1s → 2s → 5s), hiện trạng thái kết nối</span></label></li>
     <li><label><input type="checkbox"><span class="t">Lịch sử các lượt trong phiên (chỉ lưu trong bộ nhớ trình duyệt)</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Trang "Đề xuất học" (<code>web/learn.html</code>): lỗi lặp ≥2 lượt dev thành đề xuất thuật ngữ/rule, kiểm tra tự động trên bộ test, người dùng duyệt thì áp dụng ngay (T-007)</span></label>
+      <div class="hint">Thêm ngoài kế hoạch. Chỉ học cụm từ Latin; lỗi giữa từ tiếng Việt không thành rule. Duyệt khi chưa kiểm tra hoặc kiểm tra không đạt bị chặn.</div></li>
   </ul>
 
   <h3>Definition of Done</h3>
@@ -607,6 +611,19 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Chạy liên tục <span class="metric">1 giờ</span>, <span class="metric">50</span> lượt nói: VRAM không tăng dần</span></label></li>
     <li><label><input type="checkbox"><span class="t">Khởi động server bằng một lệnh, có hướng dẫn trong README</span></label></li>
   </ul>
+
+  <h3>Trạng thái (15/10/2026)</h3>
+  <div class="box">
+    <p><b>TODO đã xong hết</b>; web dùng <b>HTML/JS thuần</b> (ES modules, không có bước build). Khởi động: <code>.venv\Scripts\python -m server</code>, mở <code>http://127.0.0.1:8765</code>.</p>
+    <ul>
+      <li><b>Chất lượng:</b> đẩy 100 câu testset qua <code>/ws</code> (<code>bench/ws_client.py</code>): WER 9.2%, term recall 87.8%, khớp benchmark (9.2% / 87.2%). Còn chờ nói thật qua trình duyệt.</li>
+      <li><b>Độ trễ</b> thả phím → text: p50 552ms, p90 653ms, max 839ms.</li>
+      <li><b>VRAM:</b> 220 lượt liên tiếp, 4.30GB → 4.29GB. Còn chờ chạy đủ 1 giờ.</li>
+      <li><b>Chưa kiểm:</b> tự kết nối lại khi tắt/bật server, nói thật qua mic trình duyệt.</li>
+      <li>Thêm ngoài kế hoạch: chọn chủ đề trên UI, pre-roll 300ms, <code>Esc</code> để huỷ, log bản sửa tay + <code>bench/suggest_corrections.py</code> (T-003).</li>
+      <li><b>Vòng tự học (16/10/2026, T-007):</b> trang <code>/learn.html</code>, API <code>/api/learn</code>, bộ test cá nhân <code>bench/build_personal_set.py</code> + <code>stt_bench.py --testset</code>. Log hiện có: 13 lượt sửa (8 dev, 5 holdout), chưa lỗi nào lặp 2 lần nên chưa có đề xuất.</li>
+    </ul>
+  </div>
 
   <h3>Rủi ro</h3>
   <table>
@@ -825,8 +842,8 @@ Server → Client
   </ul>
   <h4>Chất lượng STT</h4>
   <ul class="tasks">
-    <li><label><input type="checkbox"><span class="t">Bổ sung glossary + corrections từ lỗi trong log thật</span></label></li>
-    <li><label><input type="checkbox"><span class="t">Đưa 50–100 câu từ log thật (có lưu wav) vào testset, chạy lại benchmark</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Bổ sung glossary + corrections từ lỗi trong log thật (công cụ có rồi: trang Đề xuất học, T-007)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Đưa 50–100 câu từ log thật (có lưu wav) vào testset, chạy lại benchmark (công cụ có rồi: <code>bench/build_personal_set.py</code> + <code>stt_bench.py --testset</code>, T-007)</span></label></li>
     <li><label><input type="checkbox"><span class="t"><b>Fine-tune LoRA</b> cho Whisper (chỉ khi Phase 1 kết luận cần)</span></label>
       <div class="hint">Cần ≥ 1–2 giờ audio giọng bạn có transcript chuẩn. Đánh giá trên holdout, kiểm tra tiếng Việt thuần không bị kém đi.</div></li>
   </ul>

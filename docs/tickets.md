@@ -4,12 +4,13 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 
 | ID | Tiêu đề | Phase | Trạng thái |
 |---|---|---|---|
-| T-001 | Chốt DoD Phase 1 | 1 | 🔴 chờ quyết định |
-| T-002 | Voice server + web push-to-talk, có chọn chủ đề | 2 | ⬜ |
-| T-003 | Log lượt nhận dạng + text sửa tay, làm nguồn cho corrections | 2 | ⬜ |
+| T-001 | Chốt DoD Phase 1 | 1 | ✅ 15/10/2026 |
+| T-002 | Voice server + web push-to-talk, có chọn chủ đề | 2 | 🟡 đang làm |
+| T-003 | Log lượt nhận dạng + text sửa tay, làm nguồn cho corrections | 2 | ✅ 15/10/2026 |
 | T-004 | Ghi thêm câu test mix/dense | 1 (bổ sung) | ⬜ tuỳ chọn |
 | T-005 | Nhận xét phát âm tiếng Anh dựa trên chỗ STT nghe sai | 5 | ⬜ |
 | T-006 | Quyết định: dự án narration có gộp vào repo này không | — | 🔴 chờ quyết định |
+| T-007 | Vòng tự học có kiểm soát từ bản sửa tay | 2 → 5 | ✅ 16/10/2026 (công cụ); dữ liệu tích luỹ khi dùng |
 
 ---
 
@@ -23,6 +24,8 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 **Đề xuất.** Hạ mục tiêu WER `en` xuống ≤15%, và coi term recall 88.8% là đạt.
 
 **Xong khi.** Có quyết định; PLAN.md đổi Phase 1 thành ✅ (hoặc ghi rõ việc phải làm thêm).
+
+**Kết quả (15/10/2026).** Đồng ý đề xuất: WER `en` mục tiêu ≤15%, term recall 88.8% coi là đạt. Phase 1 ✅.
 
 ## T-002: Voice server + web push-to-talk, có chọn chủ đề
 
@@ -42,6 +45,11 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 - Lưu ở `_local/`, không commit.
 - Thêm script tổng hợp các cặp (STT sai → sửa đúng) lặp lại ≥2 lần để đề xuất rule cho `data/corrections.tsv`.
 
+**Kết quả (15/10/2026).**
+- `server/turnlog.py` ghi `_local/logs/turns-YYYY-MM-DD.jsonl`: event `turn` (chủ đề, có tự đoán không, audio_ms, stt_ms, `raw`, `text` sau corrections, file wav) và event `correction` (text người dùng sửa trên web).
+- `bench/suggest_corrections.py` ghép lượt với bản sửa cuối, diff theo từ, in các cặp lặp ≥2 lần dưới dạng dòng TSV.
+- Việc còn lại thuộc về dùng thật: sau vài tuần chạy script, chép rule phù hợp vào `data/corrections.tsv`.
+
 ## T-004: Ghi thêm câu test mix/dense (tuỳ chọn)
 
 **Bối cảnh.** Holdout 30 câu thì số liệu dao động mạnh. Nên làm trước khi so sánh model mới hoặc cân nhắc fine-tune.
@@ -59,3 +67,26 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 ## T-006: Dự án narration có gộp vào repo này không
 
 **Bối cảnh.** Câu hỏi mở từ lúc lập kế hoạch, chưa có quyết định.
+
+## T-007: Vòng tự học có kiểm soát từ bản sửa tay
+
+**Bối cảnh.** Người dùng sửa transcript trên web, nhưng T-003 chỉ có script in gợi ý; không có gì được học lại. Mục tiêu: bản sửa tay thành thuật ngữ glossary / rule corrections, nhưng không học bừa. Ở Phase 1, thuật ngữ có trong prompt đúng 92%, không có thì ~59%, nên thêm thuật ngữ là đòn bẩy lớn nhất.
+
+**Nguyên tắc.**
+- Không học từ một lần sửa: lỗi phải lặp ở ≥2 lượt **dev**, và người dùng bấm duyệt.
+- Lượt nói chia dev/holdout cố định theo `sha1(turn_id) % 100 < 30` → holdout. Holdout chỉ dùng để kiểm chứng.
+- Chỉ học cụm từ Latin (thuật ngữ, từ tiếng Anh). Lỗi giữa các từ tiếng Việt không thành rule, vì rule kiểu đó phá câu khác.
+- Không đề xuất rule có vế sai chứa thuật ngữ đúng của glossary. Rule có vế sai là chữ Latin thì hiện cảnh báo.
+- Trước khi duyệt phải kiểm tra tự động; làm điểm giảm thì không duyệt được.
+
+**Kết quả (16/10/2026).**
+- `server/learning.py`: đọc log, sinh đề xuất (`term` / `rule`), kiểm tra, ghi quyết định vào `_local/learning/decisions.jsonl`, áp dụng vào `data/`.
+  - Kiểm tra rule (không cần GPU): áp vào transcript thô của mọi lượt (đếm tốt hơn / xấu hơn theo dev, holdout) và vào `per_utt.csv` của baseline `v3_vi_topic_oracle`.
+  - Kiểm tra term (GPU, xếp hàng chung khoá với lượt nói): chạy lại STT với glossary đã thêm thuật ngữ trên các lượt có thuật ngữ đó và các câu testset cùng chủ đề; cho WER lệch 0.5 điểm. Báo số token prompt, cảnh báo nếu vượt 223.
+- `server/learn_api.py`: `GET /api/learn`, `POST /api/learn/{id}/check|approve|reject`. Duyệt khi chưa kiểm tra hoặc kiểm tra không đạt → 409.
+- `web/learn.html`: trang "Đề xuất học", trang Nói có link kèm số đề xuất đang chờ. Duyệt xong áp dụng ngay từ lượt sau (server đọc lại file khi đổi).
+- `bench/build_personal_set.py`: bộ test cá nhân `_local/personal/` từ các lượt đã sửa; `stt_bench.py --testset _local/personal` lưu kết quả ở `_local/bench/stt-personal/`.
+- `bench/suggest_corrections.py`: in đề xuất ở dòng lệnh, gọi `server/learning.py`.
+- Trên log hiện có (25 lượt, 13 lượt sửa: 8 dev, 5 holdout): chưa có đề xuất, mỗi lỗi mới gặp 1 lần. Ứng viên: `Roboto → Proposal`, `GFDT → JWT`, `interface → integrate`, thuật ngữ `Proposal`, `integrate`.
+
+**Còn lại.** Tích luỹ khi dùng thật. Fine-tune LoRA vẫn ở Phase 5, chỉ làm khi bộ test cá nhân đủ lớn và glossary/rule không còn cải thiện được.

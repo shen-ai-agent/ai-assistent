@@ -16,6 +16,7 @@ class Corrector:
     def __init__(self, rules: list[tuple[str, str]]):
         # Pattern dài trước để "cloud front" không bị rule ngắn hơn nuốt mất
         rules = sorted(rules, key=lambda r: len(r[0]), reverse=True)
+        self.pairs = rules
         self.rules = [(re.compile(rf"(?<!\w){re.escape(src)}(?!\w)", re.I), dst) for src, dst in rules]
 
     @classmethod

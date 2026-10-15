@@ -1,0 +1,68 @@
+:root {
+  --bg: #0f1115; --panel: #181b22; --text: #e6e6e6; --muted: #8b93a1;
+  --accent: #4f8cff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --rec: #ff4d6d;
+  font-family: system-ui, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+header { display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 20px; background: var(--panel); border-bottom: 1px solid #262a33; }
+h1 { font-size: 18px; margin: 0; }
+h2 { font-size: 15px; margin: 24px 0 4px; }
+main { max-width: 760px; margin: 0 auto; padding: 20px; }
+.status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.dot.ok { background: var(--ok); }
+.dot.connecting { background: var(--warn); }
+.state { font-family: ui-monospace, monospace; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.controls > label { display: flex; gap: 8px; align-items: center; }
+select { background: var(--panel); color: var(--text); border: 1px solid #333a46; padding: 6px 8px; border-radius: 6px; }
+details { font-size: 13px; color: var(--muted); }
+details label { display: block; margin: 4px 0; color: var(--text); }
+.talk { text-align: center; margin-top: 28px; }
+#talk { width: 180px; height: 180px; border-radius: 50%; border: none; font-size: 16px;
+  background: var(--accent); color: white; cursor: pointer; user-select: none; touch-action: none;
+  transition: transform .08s, background .15s; }
+#talk:disabled { background: #333a46; color: var(--muted); cursor: not-allowed; }
+#talk.listening { background: var(--rec); transform: scale(1.06); }
+#talk.transcribing { background: var(--warn); }
+.meter { width: 240px; height: 6px; margin: 16px auto 0; background: #262a33; border-radius: 3px; overflow: hidden; }
+#level { height: 100%; width: 0; background: var(--ok); transition: width .08s; }
+.hint { font-size: 12px; color: var(--muted); }
+kbd { background: #262a33; border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+.error { color: var(--bad); font-size: 13px; }
+#history { padding-left: 24px; }
+.turn { margin-bottom: 14px; }
+.turn .meta { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.turn textarea { width: 100%; background: var(--panel); color: var(--text); border: 1px solid #333a46;
+  border-radius: 6px; padding: 8px; font: 15px/1.4 system-ui, sans-serif; resize: vertical; }
+.turn textarea.edited { border-color: var(--ok); }
+a { color: var(--accent); }
+.nav { font-size: 13px; text-decoration: none; margin-right: 8px; }
+.badge { background: var(--rec); color: white; border-radius: 9px; padding: 0 6px; font-size: 11px; }
+button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+button:disabled { background: #333a46; color: var(--muted); cursor: not-allowed; }
+button.secondary { background: transparent; color: var(--muted); border: 1px solid #333a46; }
+.howto { margin-bottom: 16px; }
+.howto ol { color: var(--text); padding-left: 20px; }
+.empty { color: var(--muted); }
+.card { background: var(--panel); border: 1px solid #262a33; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.card .head { display: flex; gap: 10px; align-items: baseline; font-size: 16px; }
+.card .kind { font-size: 11px; text-transform: uppercase; border-radius: 4px; padding: 2px 6px; background: #262a33; }
+.card .kind.term { color: var(--ok); }
+.card .kind.rule { color: var(--warn); }
+.card s { color: var(--bad); }
+.card .count { margin-left: auto; }
+.card .topic-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 13px; }
+.card .warning { color: var(--warn); font-size: 13px; }
+.card .examples { font-size: 13px; padding-left: 18px; }
+.card .examples li { margin-bottom: 6px; }
+.card .heard { color: var(--muted); }
+.card .result { font-size: 13px; border-top: 1px solid #262a33; margin-top: 8px; }
+.card .result ul { padding-left: 18px; }
+.card .actions { display: flex; gap: 8px; margin-top: 10px; }
+.pass { color: var(--ok); }
+.fail { color: var(--bad); }
+.better { color: var(--ok); }
+.worse { color: var(--bad); }

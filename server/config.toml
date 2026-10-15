@@ -1,0 +1,20 @@
+# Cấu hình voice server. Đường dẫn tương đối tính từ gốc repo.
+
+[server]
+host = "127.0.0.1"
+port = 8765
+
+[stt]
+# Chọn theo benchmark Phase 1 (_local/stt_report.md)
+model = "large-v3"
+compute_type = "int8_float16"
+device = "cuda"
+language = "vi"
+beam_size = 5
+min_audio_ms = 300        # ngắn hơn thì coi là bấm nhầm
+min_speech_ms = 200       # VAD thấy ít tiếng nói hơn thì bỏ qua lượt (0 = tắt), tránh Whisper bịa câu
+max_audio_s = 120         # dài hơn thì cắt, tránh giữ phím quên thả
+
+[log]
+dir = "_local/logs"
+save_audio = true         # lưu wav từng lượt để benchmark lại audio đi qua trình duyệt

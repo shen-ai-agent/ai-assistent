@@ -39,6 +39,21 @@ def load_glossary(path: Path = DEFAULT_PATH) -> list[Term]:
     return terms
 
 
+def add_term(term: str, topic: str, path: Path = DEFAULT_PATH):
+    """Thêm thuật ngữ (không ưu tiên) vào cuối mục cuối cùng của chủ đề, giữ nguyên phần còn lại của file."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    sections = [(i, m.group(1).split(":")[0].strip()) for i, line in enumerate(lines)
+                if (m := _SECTION.match(line.strip()))]
+    starts = [i for i, name in sections if name == topic]
+    if not starts:
+        raise ValueError(f"Glossary không có chủ đề {topic!r}")
+    end = next((i for i, _ in sections if i > starts[-1]), len(lines))
+    while end > starts[-1] + 1 and not lines[end - 1].strip():
+        end -= 1
+    lines.insert(end, term)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def topics(terms: list[Term]) -> list[str]:
     return list(dict.fromkeys(t.topic for t in terms))
 

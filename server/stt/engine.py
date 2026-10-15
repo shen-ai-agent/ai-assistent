@@ -50,8 +50,12 @@ class WhisperEngine:
         local = MODELS_DIR.parent / model  # model tự chuyển đổi, vd. models/phowhisper-large-ct2
         if local.is_dir():
             model = str(local)
-        self.model = WhisperModel(model, device=device, compute_type=compute_type,
-                                  download_root=str(MODELS_DIR))
+        kwargs = dict(device=device, compute_type=compute_type, download_root=str(MODELS_DIR))
+        try:
+            # Có sẵn trong models/hf thì không gọi mạng: server khởi động được cả khi offline
+            self.model = WhisperModel(model, local_files_only=True, **kwargs)
+        except Exception:
+            self.model = WhisperModel(model, **kwargs)
 
     def transcribe(
         self,

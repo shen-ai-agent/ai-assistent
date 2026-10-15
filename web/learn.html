@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Đề xuất học — Voice Study Assistant</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Đề xuất học</h1>
+  <div class="status"><a href="./" class="nav">← Nói</a></div>
+</header>
+
+<main>
+  <p id="stats" class="hint">Đang tải…</p>
+  <details class="howto">
+    <summary>Cách hoạt động</summary>
+    <ol>
+      <li>Bạn sửa transcript ở trang Nói. Lượt nói được chia cố định: ~70% <b>dev</b> sinh đề xuất,
+        ~30% <b>holdout</b> chỉ để kiểm chứng.</li>
+      <li>Một lỗi lặp ở từ 2 lượt dev trở lên thì thành đề xuất. Chỉ học thuật ngữ tiếng Anh;
+        lỗi giữa các từ tiếng Việt không học, vì rule kiểu đó dễ phá câu khác.</li>
+      <li><b>Kiểm tra</b> chấm lại bộ test 100 câu và các lượt nói của bạn với đề xuất. Làm điểm giảm thì không duyệt được.
+        Thuật ngữ cần GPU, mất chừng vài chục giây.</li>
+      <li><b>Duyệt</b> ghi vào <code>data/glossary.txt</code> hoặc <code>data/corrections.tsv</code>,
+        áp dụng ngay từ lượt nói tiếp theo. <b>Bỏ qua</b> thì đề xuất không hiện lại.</li>
+    </ol>
+  </details>
+  <p id="error" class="error" hidden></p>
+  <div id="list"></div>
+</main>
+
+<template id="card-tpl">
+  <article class="card">
+    <div class="head">
+      <span class="kind"></span>
+      <span class="what"></span>
+      <span class="count hint"></span>
+    </div>
+    <label class="topic-row" hidden>Chủ đề <select class="topic"></select></label>
+    <p class="warning" hidden></p>
+    <ul class="examples"></ul>
+    <div class="result" hidden></div>
+    <div class="actions">
+      <button class="check">Kiểm tra</button>
+      <button class="approve" disabled>Duyệt</button>
+      <button class="reject secondary">Bỏ qua</button>
+    </div>
+  </article>
+</template>
+
+<script type="module" src="learn.js"></script>
+</body>
+</html>

@@ -97,9 +97,9 @@ AI-assistent/
 
 ### DoD
 - [x] Bảng so sánh ít nhất 4 cấu hình trên cùng testset, cùng metric (15 cấu hình)
-- [ ] Cấu hình được chọn đạt (mục tiêu ban đầu → đo được với `v3_vi_topic_oracle`):
-  - Term recall ≥ **90%** trên nhóm code-switching → 88.8% (holdout 89.3%) ⚠️ sát
-  - WER ≤ **15%** toàn bộ → 9.2% ✅; WER nhóm `en` ≤ **10%** → 14.9% ❌. Lỗi do phát âm ("word"→"world", "chart"→"chair"), không phải do ép `vi`: ép `en` cũng ra 14.9%
+- [x] Cấu hình được chọn đạt (mục tiêu ban đầu → đo được với `v3_vi_topic_oracle`; chốt 15/10/2026, T-001):
+  - Term recall ≥ **90%** trên nhóm code-switching → 88.8% (holdout 89.3%). Chấp nhận: chênh lệch nằm trong sai số của holdout 30 câu
+  - WER ≤ **15%** toàn bộ → 9.2% ✅; WER nhóm `en` ≤ ~~10%~~ **15%** → 14.9% ✅ (đã hạ mục tiêu). Lỗi do phát âm ("word"→"world", "chart"→"chair"), không phải do ép `vi`: ép `en` cũng ra 14.9%
   - RTF ≤ **0.3** trên RTX 3060 → 0.11 ✅
   - VRAM ≤ **5GB** → 2.4GB ✅
 - [x] Quyết định rõ ràng: **có cần fine-tune hay không** → **Không** (term recall 87% > ngưỡng 80%)
@@ -112,24 +112,28 @@ AI-assistent/
 
 ### TODO
 **Server**
-- [ ] FastAPI + WebSocket endpoint `/ws`
-- [ ] Load model STT 1 lần lúc khởi động, không load lại mỗi request
-- [ ] Nhận audio PCM 16kHz mono, transcribe, áp post-correction, trả text
-- [ ] Định nghĩa protocol message (JSON): `state`, `transcript`, `error`, `audio_chunk`...
-- [ ] Log mỗi lượt: thời lượng audio, thời gian STT, text
+- [x] FastAPI + WebSocket endpoint `/ws`, thêm `/health` (`server/app.py`, chạy `python -m server`)
+- [x] Load model STT 1 lần lúc khởi động, có warm-up, không load lại mỗi request
+- [x] Nhận audio PCM 16kHz mono, transcribe, áp post-correction, trả text (`server/stt/service.py`, prompt theo chủ đề, không chọn chủ đề thì two_pass)
+- [x] Định nghĩa protocol message (JSON): `hello`, `start`, `stop`, `cancel`, `correction`, `state`, `transcript`, `error` (`server/protocol.py`)
+- [x] Log mỗi lượt: thời lượng audio, thời gian STT, chủ đề, text, wav, bản sửa tay (`_local/logs/`, T-003)
 
 **Web**
-- [ ] Trang tối giản theo mockup: trạng thái, transcript, nút 🎤 / ⏹
-- [ ] `getUserMedia` + AudioWorklet → resample 16kHz → gửi qua WebSocket
-- [ ] Push-to-talk: giữ phím Space (hoặc giữ nút) để nói, thả ra để gửi
-- [ ] State machine phía client: `IDLE → LISTENING → TRANSCRIBING → IDLE`, thêm `ERROR`
-- [ ] Hiện transcript và cho phép sửa tay trước khi gửi đi
+- [x] Trang tối giản: trạng thái kết nối, trạng thái lượt, mức mic, chọn chủ đề, nút giữ để nói, lịch sử phiên
+- [x] `getUserMedia` + AudioWorklet → resample 16kHz → frame 100ms qua WebSocket, pre-roll 300ms
+- [x] Push-to-talk: giữ phím Space (hoặc giữ nút) để nói, thả ra để gửi, `Esc` để huỷ
+- [x] State machine phía client: `IDLE → LISTENING → TRANSCRIBING → IDLE`, thêm `ERROR`
+- [x] Hiện transcript và cho phép sửa tay (bản sửa ghi log làm nguồn cho corrections)
+- [x] Trang "Đề xuất học" (`web/learn.html`): lỗi lặp ≥2 lượt dev thành đề xuất thuật ngữ/rule, kiểm tra tự động trên bộ test, người dùng duyệt thì áp dụng ngay (T-007)
 
 ### DoD
 - [ ] Chạy `server` + mở web, nói 10 câu từ testset, transcript khớp chất lượng benchmark Phase 1
+  - Đẩy audio testset qua `/ws` (`bench/ws_client.py`, 100 câu): WER 9.2%, term recall 87.8%, khớp benchmark (9.2% / 87.2%). Còn chờ nói thật qua trình duyệt
 - [ ] Độ trễ từ lúc thả phím đến lúc thấy text ≤ **2 giây** với câu ~10 giây
+  - Qua `ws_client.py`: p50 552ms, p90 653ms, max 839ms. Còn chờ đo trên trình duyệt
 - [ ] Reload trang / mất kết nối WebSocket thì tự kết nối lại, không phải restart server
 - [ ] Server chạy liên tục 1 giờ, nói 50 lượt, không leak VRAM (VRAM ổn định)
+  - 220 lượt liên tiếp qua `ws_client.py`: VRAM 4.30GB → 4.29GB. Còn chờ chạy đủ 1 giờ
 
 ---
 
@@ -206,8 +210,8 @@ AI-assistent/
 ### TODO (chọn theo feedback)
 - [ ] **Ngắt lời (barge-in):** bấm 🎤 khi đang SPEAKING → dừng đọc ngay, bắt đầu nghe
 - [ ] **VAD (Silero)** cho chế độ rảnh tay: tự phát hiện bắt đầu/kết thúc câu
-- [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật
-- [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark
+- [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
+- [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
 - [ ] **Fine-tune STT** (chỉ khi Phase 1 kết luận cần): LoRA trên whisper với dữ liệu giọng mình + thuật ngữ
 - [ ] Chỉnh tốc độ đọc, nút "đọc lại", "đọc chậm"
 - [ ] Script khởi động 1 lệnh (server + mở web)
@@ -269,8 +273,8 @@ AI-assistent/
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Setup & dataset | ✅ 15/10/2026 — 100 câu, 8.3 phút, micro Realtek 3.5mm |
-| 1 | Benchmark STT | 🟡 15/10/2026 — chọn large-v3 + prompt theo chủ đề, WER 9.2%, term recall 87%; WER en 14.9% chưa đạt |
-| 2 | Voice server + Web (STT) | ⬜ |
+| 1 | Benchmark STT | ✅ 15/10/2026 — large-v3 + prompt theo chủ đề, WER 9.2%, term recall 87%, không fine-tune |
+| 2 | Voice server + Web (STT) | 🟡 TODO xong, chờ thử trên trình duyệt (T-002) |
 | 3 | TTS | ⬜ |
 | 4 | Claude bridge, chạy trọn vòng | ⬜ |
 | 5 | Hoàn thiện trải nghiệm | ⬜ |

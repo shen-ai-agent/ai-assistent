@@ -266,7 +266,14 @@ def main():
                     help="chấm lại kết quả đã lưu của các --config (hoặc tất cả), không chạy model")
     ap.add_argument("--with-corrections", action="store_true",
                     help="(với --rescore) áp dụng data/corrections.tsv, lưu thành <config>+corr")
+    ap.add_argument("--testset", type=Path,
+                    help="thư mục bộ test khác (vd _local/personal); kết quả lưu ở _local/bench/stt-<tên thư mục>")
     args = ap.parse_args()
+
+    if args.testset:
+        global TESTSET, OUT_DIR
+        TESTSET = args.testset.resolve()
+        OUT_DIR = ROOT / "_local" / "bench" / f"stt-{TESTSET.name}"
 
     if args.rescore:
         names = args.config or [p.parent.name for p in sorted(OUT_DIR.glob("*/summary.json"))

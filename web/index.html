@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Study Assistant</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Voice Study Assistant</h1>
+  <div class="status">
+    <a href="learn.html" class="nav">Đề xuất học <span id="learn-count" class="badge" hidden></span></a>
+    <span id="conn" class="dot" title="Kết nối server"></span>
+    <span id="state" class="state">…</span>
+  </div>
+</header>
+
+<main>
+  <section class="controls">
+    <label>Micro
+      <select id="mic"><option value="">Mặc định của hệ thống</option></select>
+    </label>
+    <label>Chủ đề
+      <select id="topic">
+        <option value="">Tự đoán</option>
+      </select>
+    </label>
+    <details>
+      <summary>Xử lý âm thanh của trình duyệt</summary>
+      <p class="hint">Mặc định tắt cả ba: benchmark Phase 1 dùng audio thô. Bật khi phòng ồn hoặc nghe loa ngoài.</p>
+      <label><input type="checkbox" id="opt-echoCancellation"> Khử vọng (echoCancellation)</label>
+      <label><input type="checkbox" id="opt-noiseSuppression"> Lọc ồn (noiseSuppression)</label>
+      <label><input type="checkbox" id="opt-autoGainControl"> Tự chỉnh âm lượng (autoGainControl)</label>
+    </details>
+  </section>
+
+  <section class="talk">
+    <button id="talk" disabled>Giữ để nói</button>
+    <div class="meter"><div id="level"></div></div>
+    <p class="hint">Giữ <kbd>Space</kbd> hoặc giữ nút. <kbd>Esc</kbd> để huỷ.</p>
+    <p id="error" class="error" hidden></p>
+  </section>
+
+  <section>
+    <h2>Lịch sử phiên</h2>
+    <p class="hint">Sửa trực tiếp transcript nếu sai (nhớ gõ đủ dấu cách). Lỗi lặp từ 2 lượt trở lên sẽ thành
+      đề xuất ở trang <a href="learn.html">Đề xuất học</a>, bạn duyệt thì mới áp dụng.</p>
+    <ol id="history" reversed></ol>
+  </section>
+</main>
+
+<template id="turn-tpl">
+  <li class="turn">
+    <div class="meta"></div>
+    <textarea rows="2" spellcheck="false"></textarea>
+  </li>
+</template>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
