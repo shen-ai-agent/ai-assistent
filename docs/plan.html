@@ -502,6 +502,26 @@
     </ul>
   </div>
 
+  <h3>Kết quả (15/10/2026)</h3>
+  <div class="box">
+    <p><b>Chọn:</b> <code>large-v3</code>, int8_float16, beam 5, ép <code>language="vi"</code>, <b>prompt theo chủ đề</b>. Glossary chia 4 chủ đề (AWS, .NET/C#, Dev chung, Tiếng Anh). Chủ đề chọn theo phiên học; chưa chọn thì dùng two_pass (đoán chủ đề từ lượt nhận dạng đầu). <b>Không fine-tune.</b></p>
+    <table>
+      <tr><th>Cấu hình</th><th>WER</th><th>WER en</th><th>Term mix/holdout</th><th>RTF</th><th>VRAM</th></tr>
+      <tr><td>large-v3, không prompt</td><td>20.8%</td><td>33.8%</td><td>57.1%</td><td>0.11</td><td>2.3GB</td></tr>
+      <tr><td>large-v3, 36 thuật ngữ ưu tiên</td><td>14.6%</td><td>14.9%</td><td>60.7%</td><td>0.12</td><td>2.2GB</td></tr>
+      <tr><td>large-v3, chủ đề tự đoán (two_pass)</td><td>11.0%</td><td>14.9%</td><td>78.6%</td><td>0.18</td><td>2.1GB</td></tr>
+      <tr><td><b>large-v3, chủ đề chọn sẵn</b></td><td><b>9.2%</b></td><td>14.9%</td><td><b>89.3%</b></td><td>0.11</td><td>2.4GB</td></tr>
+      <tr><td>turbo, 36 thuật ngữ ưu tiên</td><td>15.9%</td><td>13.4%</td><td>64.3%</td><td>0.05</td><td>1.3GB</td></tr>
+      <tr><td>PhoWhisper-large + prompt</td><td>31.5%</td><td>36.3%</td><td>35.7%</td><td>0.13</td><td>2.4GB</td></tr>
+    </table>
+    <ul>
+      <li><b>Prompt là đòn bẩy chính:</b> thuật ngữ có trong prompt đúng 92%, không có thì khoảng 59%. Whisper chỉ giữ khoảng 223 token prompt nên phải chia glossary theo chủ đề.</li>
+      <li><b>Ép <code>vi</code> không làm hỏng câu tiếng Anh:</b> ép <code>en</code> cũng cho WER en 14.9%. Lỗi nhóm en đến từ phát âm ("word"→"world", "chart"→"chair"). Có thể tận dụng để nhận xét phát âm ở Phase 5.</li>
+      <li><b>Corrections:</b> dev không có lỗi nào lặp ≥2 lần nên chưa thêm rule. Xây từ log dùng thật ở Phase 2.</li>
+      <li><b>Chưa đạt:</b> WER en 14.9% (mục tiêu 10%); term recall mix 88.8% (mục tiêu 90%, sát).</li>
+    </ul>
+  </div>
+
   <h3>Rủi ro</h3>
   <table>
     <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>

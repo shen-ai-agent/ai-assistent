@@ -2,6 +2,8 @@
 #   pip install torch --index-url https://download.pytorch.org/whl/cu128
 torch==2.11.0
 
+# STT
+faster-whisper==1.2.1
 # Audio
 sounddevice==0.5.6
 soundfile==0.14.0

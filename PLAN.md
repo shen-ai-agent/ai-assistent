@@ -3,6 +3,7 @@
 Lớp Voice I/O (STT + TTS) chạy local, bọc quanh Claude. Claude lo chat/research, project này lo nghe và đọc.
 
 > **Bản chi tiết** (gợi ý kỹ thuật, rủi ro, điểm quyết định, checkbox theo dõi tiến độ): mở [docs/plan.html](docs/plan.html) bằng trình duyệt.
+> **Việc đang mở:** [docs/tickets.md](docs/tickets.md).
 
 ```text
 🎤 → Web (push-to-talk) → Python Voice Server → STT → text
@@ -76,29 +77,32 @@ AI-assistent/
 **Mục tiêu:** chọn được cấu hình STT tốt nhất cho tiếng Việt + thuật ngữ tiếng Anh, có số liệu.
 
 ### TODO
-- [ ] Viết `bench/stt_bench.py`: chạy 1 cấu hình trên toàn bộ testset, xuất CSV từng câu + tổng
-- [ ] Metric:
+- [x] Viết `bench/stt_bench.py`: chạy 1 cấu hình trên toàn bộ testset, xuất CSV từng câu + tổng
+- [x] Metric:
   - WER (sau khi chuẩn hoá: lowercase, bỏ dấu câu)
   - **Term recall** = số thuật ngữ nhận đúng / tổng thuật ngữ trong `terms`
   - RTF (thời gian xử lý / thời lượng audio) và VRAM đỉnh
-- [ ] Chạy các cấu hình:
-  - [ ] faster-whisper `large-v3`, int8, không prompt (baseline)
-  - [ ] faster-whisper `large-v3`, int8, `initial_prompt` = glossary rút gọn
-  - [ ] faster-whisper `large-v3-turbo` (có/không prompt)
-  - [ ] PhoWhisper (large)
-  - [ ] `language="vi"` cố định vs tự nhận diện vs hai lượt (detect rồi mới nhận dạng). **Quan trọng vì có nhóm `en`**: ép `vi` có thể làm hỏng câu tiếng Anh hoàn toàn
-- [ ] Viết post-correction dictionary (`"nát gết uây" → "NAT Gateway"`) từ các lỗi lặp lại, chạy lại đo
-- [ ] Liệt kê top 20 thuật ngữ hay sai nhất
-- [ ] Viết báo cáo ngắn `_local/stt_report.md`: bảng so sánh + lựa chọn + lý do
+- [x] Chạy các cấu hình:
+  - [x] faster-whisper `large-v3`, int8, không prompt (baseline)
+  - [x] faster-whisper `large-v3`, int8, `initial_prompt` = glossary rút gọn
+  - [x] faster-whisper `large-v3-turbo` (có/không prompt)
+  - [x] PhoWhisper (large)
+  - [x] `language="vi"` cố định vs tự nhận diện vs hai lượt (detect rồi mới nhận dạng). **Quan trọng vì có nhóm `en`**: ép `vi` có thể làm hỏng câu tiếng Anh hoàn toàn
+  - [x] Thêm: prompt theo chủ đề (glossary chia 4 chủ đề), chọn chủ đề sẵn (oracle) hoặc đoán từ lượt 1 (two_pass)
+- [x] Viết post-correction dictionary từ các lỗi lặp lại, chạy lại đo. Kết quả: dev không có lỗi nào lặp ≥2 lần với prompt theo chủ đề, nên chưa thêm rule. Xây lại từ log thật ở Phase 2
+- [x] Liệt kê top 20 thuật ngữ hay sai nhất
+- [x] Viết báo cáo ngắn `_local/stt_report.md`: bảng so sánh + lựa chọn + lý do
+
+**Kết quả:** chọn `large-v3`, ép `vi`, prompt theo chủ đề. Chi tiết trong `_local/stt_report.md`.
 
 ### DoD
-- [ ] Bảng so sánh ít nhất 4 cấu hình trên cùng testset, cùng metric
-- [ ] Cấu hình được chọn đạt (mục tiêu ban đầu):
-  - Term recall ≥ **90%** trên nhóm code-switching
-  - WER ≤ **15%** toàn bộ, và WER nhóm `en` ≤ **10%** (câu tiếng Anh không bị "Việt hoá")
-  - RTF ≤ **0.3** (câu 10 giây xử lý ≤ 3 giây) trên RTX 3060
-  - VRAM ≤ **5GB** (để chừa chỗ cho TTS)
-- [ ] Quyết định rõ ràng: **có cần fine-tune hay không**. Nếu term recall < 80% sau khi đã thêm prompt + post-correction thì đưa fine-tune vào Phase 5
+- [x] Bảng so sánh ít nhất 4 cấu hình trên cùng testset, cùng metric (15 cấu hình)
+- [ ] Cấu hình được chọn đạt (mục tiêu ban đầu → đo được với `v3_vi_topic_oracle`):
+  - Term recall ≥ **90%** trên nhóm code-switching → 88.8% (holdout 89.3%) ⚠️ sát
+  - WER ≤ **15%** toàn bộ → 9.2% ✅; WER nhóm `en` ≤ **10%** → 14.9% ❌. Lỗi do phát âm ("word"→"world", "chart"→"chair"), không phải do ép `vi`: ép `en` cũng ra 14.9%
+  - RTF ≤ **0.3** trên RTX 3060 → 0.11 ✅
+  - VRAM ≤ **5GB** → 2.4GB ✅
+- [x] Quyết định rõ ràng: **có cần fine-tune hay không** → **Không** (term recall 87% > ngưỡng 80%)
 
 ---
 
@@ -265,7 +269,7 @@ AI-assistent/
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Setup & dataset | ✅ 15/10/2026 — 100 câu, 8.3 phút, micro Realtek 3.5mm |
-| 1 | Benchmark STT | ⬜ |
+| 1 | Benchmark STT | 🟡 15/10/2026 — chọn large-v3 + prompt theo chủ đề, WER 9.2%, term recall 87%; WER en 14.9% chưa đạt |
 | 2 | Voice server + Web (STT) | ⬜ |
 | 3 | TTS | ⬜ |
 | 4 | Claude bridge, chạy trọn vòng | ⬜ |

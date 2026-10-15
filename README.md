@@ -25,3 +25,15 @@ py -3.11 -m venv .venv
 ```
 
 Audio lưu ở `data/testset/` và không được commit.
+
+## Benchmark STT
+
+Các cấu hình nằm trong `bench/stt_configs.toml`. Kết quả lưu ở `_local/bench/stt/`.
+
+```powershell
+.venv\Scripts\python bench\stt_bench.py --config v3_vi v3_vi_prompt   # chạy vài cấu hình
+.venv\Scripts\python bench\stt_bench.py --all                          # chạy tất cả
+.venv\Scripts\python bench\stt_bench.py --compare                      # bảng so sánh
+.venv\Scripts\python bench\stt_bench.py --rescore --with-corrections   # chấm lại khi áp data\corrections.tsv
+.venv\Scripts\python -m pytest -q tests
+```

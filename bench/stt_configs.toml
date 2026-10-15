@@ -1,0 +1,102 @@
+# Các cấu hình STT để so sánh. Chạy: python bench/stt_bench.py --config v3_vi v3_vi_prompt
+#
+# Khoá:
+#   model         tên model faster-whisper (large-v3, large-v3-turbo) hoặc đường dẫn thư mục CT2
+#   compute_type  mặc định int8_float16
+#   language      vi | en | auto | auto_vi_bias
+#   en_threshold  (auto_vi_bias) xác suất tiếng Anh tối thiểu để chuyển sang en
+#   prompt        none | list | sentence   (initial_prompt dựng từ thuật ngữ * trong glossary)
+#   hotwords      true/false               (thuật ngữ * đưa vào hotwords)
+#   beam_size     mặc định 5
+#   corrections   true/false               (áp dụng data/corrections.tsv sau khi nhận dạng)
+
+[v3_vi]
+model = "large-v3"
+language = "vi"
+
+[v3_vi_prompt]
+model = "large-v3"
+language = "vi"
+prompt = "list"
+
+[v3_vi_prompt_sentence]
+model = "large-v3"
+language = "vi"
+prompt = "sentence"
+
+[v3_vi_hotwords]
+model = "large-v3"
+language = "vi"
+hotwords = true
+
+[v3_vi_prompt_beam1]
+model = "large-v3"
+language = "vi"
+prompt = "list"
+beam_size = 1
+
+[v3_auto]
+model = "large-v3"
+language = "auto"
+
+[v3_auto_prompt]
+model = "large-v3"
+language = "auto"
+prompt = "list"
+
+[v3_vibias_prompt]
+model = "large-v3"
+language = "auto_vi_bias"
+prompt = "list"
+
+[turbo_vi]
+model = "large-v3-turbo"
+language = "vi"
+
+[turbo_vi_prompt]
+model = "large-v3-turbo"
+language = "vi"
+prompt = "list"
+
+[turbo_vibias_prompt]
+model = "large-v3-turbo"
+language = "auto_vi_bias"
+prompt = "list"
+
+# PhoWhisper (VinAI, fine-tune tiếng Việt). Chuyển đổi:
+#   ct2-transformers-converter --model vinai/PhoWhisper-large --output_dir models/phowhisper-large-ct2 \
+#     --copy_files tokenizer.json preprocessor_config.json --quantization float16
+[pho_vi]
+model = "phowhisper-large-ct2"
+language = "vi"
+
+[pho_vi_prompt]
+model = "phowhisper-large-ct2"
+language = "vi"
+prompt = "list"
+
+# Prompt theo chủ đề (glossary chia mục). topic = oracle | two_pass
+[v3_vi_topic_oracle]
+model = "large-v3"
+language = "vi"
+prompt = "topic"
+topic = "oracle"
+
+[v3_vi_topic_2pass]
+model = "large-v3"
+language = "vi"
+prompt = "topic"
+topic = "two_pass"
+
+# Chỉ để đo mức trần cho nhóm en (câu tiếng Việt sẽ sai hết)
+[v3_en_topic_oracle]
+model = "large-v3"
+language = "en"
+prompt = "topic"
+topic = "oracle"
+
+[v3_vibias_topic_oracle]
+model = "large-v3"
+language = "auto_vi_bias"
+prompt = "topic"
+topic = "oracle"

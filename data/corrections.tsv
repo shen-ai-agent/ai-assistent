@@ -1,0 +1,2 @@
+# Sửa lỗi STT lặp lại. Mỗi dòng: <cách STT viết sai>	<cách viết đúng>
+# Chỉ thêm rule thấy lặp lại ở tập dev (>= 2 lần). Kiểm chứng trên holdout.
