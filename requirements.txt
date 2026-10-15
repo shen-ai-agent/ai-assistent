@@ -1,0 +1,13 @@
+# PyTorch cài riêng theo bản CUDA:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0
+
+# Audio
+sounddevice==0.5.6
+soundfile==0.14.0
+numpy==2.4.6
+soxr==1.1.0
+
+# Benchmark
+jiwer==4.0.0
+nvidia-ml-py==13.615.71

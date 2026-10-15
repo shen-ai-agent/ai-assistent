@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node
+node_modules/
+web/dist/
+
+# Dữ liệu nặng / cá nhân — không commit
+data/testset/
+models/
+voice/**/*.wav
+voice/**/*.flac
+voice/models/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

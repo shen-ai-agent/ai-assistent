@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Study Assistant — Kế hoạch chi tiết</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1f2328; --muted: #656d76; --border: #e3e3df;
+    --accent: #2f6feb; --accent-soft: #e8f0fe; --ok: #1a7f37; --ok-soft: #e6f4ea;
+    --warn: #9a6700; --warn-soft: #fff4d6; --danger: #cf222e; --danger-soft: #ffebe9;
+    --code: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a21; --text: #e6e6e6; --muted: #9aa4b2; --border: #2a2f3a;
+      --accent: #6ea8ff; --accent-soft: #1b2740; --ok: #4ac26b; --ok-soft: #14291b;
+      --warn: #e3b341; --warn-soft: #2e2512; --danger: #ff7b72; --danger-soft: #331a1a;
+      --code: #1f232b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.65 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  code, pre { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; line-height: 1.5; margin: 8px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  h1, h2, h3, h4 { line-height: 1.3; }
+
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+  nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px 14px;
+    border-right: 1px solid var(--border); background: var(--panel); }
+  nav .brand { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  nav .sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; }
+  nav a { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 6px 10px; border-radius: 6px; color: var(--text); font-size: 14px; }
+  nav a:hover { background: var(--accent-soft); }
+  nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  nav .group-label { margin: 14px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  nav .pct { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  nav .pct.done { color: var(--ok); font-weight: 700; }
+
+  main { padding: 28px 40px 80px; max-width: 1060px; }
+  header.top { margin-bottom: 28px; }
+  header.top h1 { margin: 0 0 6px; font-size: 28px; }
+  header.top p { margin: 0; color: var(--muted); }
+  .overall { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+  .bar { flex: 1; height: 10px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .3s; }
+  .overall .label { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 120px; text-align: right; }
+  button { font: inherit; font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+  button:hover { border-color: var(--accent); }
+
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px 28px; margin-bottom: 24px; }
+  section > h2 { margin-top: 0; font-size: 22px; }
+  h3 { font-size: 17px; margin: 24px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+  h4 { font-size: 15px; margin: 18px 0 6px; color: var(--accent); }
+
+  .phase-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .phase-head h2 { margin: 0; font-size: 22px; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 99px;
+    background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; }
+  .chip { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); }
+  .chip b { color: var(--text); font-weight: 600; }
+  .phase-progress { min-width: 180px; text-align: right; font-size: 13px; color: var(--muted); }
+  .phase-progress .bar { margin-top: 6px; height: 6px; }
+
+  .goal { font-size: 16px; padding: 12px 16px; border-left: 4px solid var(--accent); background: var(--accent-soft);
+    border-radius: 0 8px 8px 0; margin: 16px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .box { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .box h4 { margin-top: 0; }
+  .box ul { margin: 0; padding-left: 20px; }
+
+  ul.tasks { list-style: none; padding: 0; margin: 4px 0; }
+  ul.tasks > li { padding: 7px 10px; border-radius: 8px; margin: 2px 0; }
+  ul.tasks > li:hover { background: var(--bg); }
+  ul.tasks label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  ul.tasks input { margin-top: 5px; width: 16px; height: 16px; accent-color: var(--ok); flex-shrink: 0; }
+  ul.tasks li.checked .t { color: var(--muted); text-decoration: line-through; }
+  .hint { margin: 4px 0 0 26px; font-size: 13.5px; color: var(--muted); }
+  .hint ul { margin: 4px 0; padding-left: 18px; }
+  ul.dod > li { border-left: 3px solid var(--ok); background: var(--ok-soft); margin: 6px 0; border-radius: 0 8px 8px 0; }
+  ul.dod > li:hover { background: var(--ok-soft); }
+  .metric { font-weight: 700; color: var(--ok); }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+  .gate { margin-top: 20px; border: 1px dashed var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 12px 16px; }
+  .gate b.t { color: var(--warn); }
+  .note { border-left: 4px solid var(--muted); padding: 8px 14px; background: var(--bg); border-radius: 0 8px 8px 0; margin: 12px 0; font-size: 14px; }
+  .warn { border-left-color: var(--danger); background: var(--danger-soft); }
+
+  /* Sơ đồ pipeline */
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 12px 0; }
+  .flow .node { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); font-size: 13.5px; text-align: center; }
+  .flow .node small { display: block; color: var(--muted); font-size: 11.5px; }
+  .flow .node.stt { border-color: #8250df; }
+  .flow .node.tts { border-color: #bf3989; }
+  .flow .node.llm { border-color: var(--warn); }
+  .flow .node.web { border-color: var(--accent); }
+  .flow .arrow { color: var(--muted); font-size: 18px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; border: 2px solid; vertical-align: -1px; }
+  .legend .l-web::before { border-color: var(--accent); }
+  .legend .l-stt::before { border-color: #8250df; }
+  .legend .l-llm::before { border-color: var(--warn); }
+  .legend .l-tts::before { border-color: #bf3989; }
+
+  .states { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+  .state { font-family: Consolas, monospace; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 6px; color: #fff; }
+  .s-idle { background: #6e7781; } .s-listen { background: #1a7f37; } .s-trans { background: #8250df; }
+  .s-wait { background: #9a6700; } .s-speak { background: #bf3989; } .s-err { background: #cf222e; }
+
+  /* Roadmap */
+  .roadmap { display: grid; gap: 8px; }
+  .rm-row { display: grid; grid-template-columns: 70px 1fr 110px; gap: 12px; align-items: center; }
+  .rm-row .ph { font-weight: 700; color: var(--accent); }
+  .rm-track { position: relative; height: 26px; background: var(--bg); border-radius: 6px; }
+  .rm-track span { position: absolute; top: 0; bottom: 0; border-radius: 6px; background: var(--accent-soft);
+    border: 1px solid var(--accent); font-size: 12px; padding: 0 8px; display: flex; align-items: center; white-space: nowrap; overflow: hidden; }
+  .rm-track span.opt { border-style: dashed; }
+  .rm-row .dur { font-size: 13px; color: var(--muted); text-align: right; }
+
+  .concepts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .concept { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .concept b { display: block; margin-bottom: 4px; }
+  .concept p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+    main { padding: 20px 16px; }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  @media print {
+    nav, button { display: none; }
+    .layout { grid-template-columns: 1fr; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav id="toc">
+  <div class="brand">🎙️ Voice Study Assistant</div>
+  <div class="sub">Kế hoạch chi tiết · cập nhật 15/10/2026</div>
+  <div class="group-label">Tổng quan</div>
+  <a href="#overview">Kiến trúc &amp; nguyên tắc</a>
+  <a href="#roadmap">Lộ trình</a>
+  <a href="#concepts">Khái niệm cần biết</a>
+  <div class="group-label">Các phase</div>
+  <a href="#phase0">0 · Setup &amp; dataset <span class="pct" data-for="phase0"></span></a>
+  <a href="#phase1">1 · Benchmark STT <span class="pct" data-for="phase1"></span></a>
+  <a href="#phase2">2 · Server + Web STT <span class="pct" data-for="phase2"></span></a>
+  <a href="#phase3">3 · TTS <span class="pct" data-for="phase3"></span></a>
+  <a href="#phase4">4 · Claude bridge <span class="pct" data-for="phase4"></span></a>
+  <a href="#phase5">5 · Hoàn thiện <span class="pct" data-for="phase5"></span></a>
+  <a href="#phase6">6 · Giọng của mình <span class="pct" data-for="phase6"></span></a>
+  <a href="#phase7">7 · Mọi thiết bị <span class="pct" data-for="phase7"></span></a>
+  <div class="group-label">Khác</div>
+  <a href="#risks">Rủi ro tổng thể</a>
+  <a href="#rules">Quy ước làm việc</a>
+</nav>
+
+<main>
+<header class="top">
+  <h1>Voice Study Assistant</h1>
+  <p>Lớp Voice I/O (STT + TTS) chạy local trên máy, bọc quanh Claude. Claude lo chat và research, trợ lý lo nghe và đọc.</p>
+  <div class="overall">
+    <div class="bar"><span id="overallBar"></span></div>
+    <div class="label" id="overallLabel">0 / 0</div>
+    <button id="resetBtn" title="Bỏ tick tất cả checkbox">Reset tiến độ</button>
+  </div>
+</header>
+
+<!-- ============ TỔNG QUAN ============ -->
+<section id="overview">
+  <h2>Kiến trúc &amp; nguyên tắc</h2>
+
+  <h3>Luồng một lượt hỏi–đáp</h3>
+  <div class="flow">
+    <div class="node web">🎤 Giữ Space<small>Web push-to-talk</small></div><span class="arrow">→</span>
+    <div class="node web">PCM 16kHz<small>WebSocket</small></div><span class="arrow">→</span>
+    <div class="node stt">STT<small>faster-whisper / PhoWhisper</small></div><span class="arrow">→</span>
+    <div class="node stt">Sửa lỗi thuật ngữ<small>post-correction</small></div><span class="arrow">→</span>
+    <div class="node llm">Claude bridge<small>clipboard → claude -p</small></div><span class="arrow">→</span>
+    <div class="node tts">Normalize<small>markdown, viết tắt, số</small></div><span class="arrow">→</span>
+    <div class="node tts">Tách câu → TTS<small>từng câu một</small></div><span class="arrow">→</span>
+    <div class="node web">🔊 Audio queue<small>dừng được ngay</small></div>
+  </div>
+  <div class="legend"><span class="l-web">Web (trình duyệt)</span><span class="l-stt">STT (Python, GPU)</span><span class="l-llm">LLM (Claude)</span><span class="l-tts">TTS (Python, GPU)</span></div>
+
+  <h3>Trạng thái của trợ lý</h3>
+  <div class="states">
+    <span class="state s-idle">IDLE</span><span class="arrow">→</span>
+    <span class="state s-listen">LISTENING</span><span class="arrow">→</span>
+    <span class="state s-trans">TRANSCRIBING</span><span class="arrow">→</span>
+    <span class="state s-wait">WAITING_CLAUDE</span><span class="arrow">→</span>
+    <span class="state s-speak">SPEAKING</span><span class="arrow">→</span>
+    <span class="state s-idle">IDLE</span>
+    <span style="margin-left:12px;color:var(--muted)">· bất kỳ bước nào →</span>
+    <span class="state s-err">ERROR</span>
+  </div>
+  <p style="font-size:14px;color:var(--muted)">Từ Phase 5: bấm 🎤 khi đang <code>SPEAKING</code> → dừng đọc và chuyển ngay sang <code>LISTENING</code> (ngắt lời).</p>
+
+  <h3>Thành phần</h3>
+  <div class="grid2">
+    <div class="box">
+      <h4>Python Voice Server (<code>server/</code>)</h4>
+      <ul>
+        <li>FastAPI + WebSocket, chạy ở <code>localhost</code></li>
+        <li>Load model STT/TTS một lần lúc khởi động, giữ trên GPU</li>
+        <li>Không biết gì về Claude ngoài interface <code>Bridge.ask()</code></li>
+      </ul>
+    </div>
+    <div class="box">
+      <h4>Web (<code>web/</code>)</h4>
+      <ul>
+        <li>Thu mic, push-to-talk, hiện trạng thái và transcript</li>
+        <li>Phát audio theo hàng đợi, dừng được ngay</li>
+        <li>Không xử lý AI. Chỉ là lớp vào/ra</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Cấu trúc repo (một repo duy nhất)</h3>
+<pre>AI-assistent/
+├── PLAN.md                 # bản tóm tắt
+├── docs/plan.html          # bản chi tiết (file này)
+├── server/
+│   ├── stt/                # transcribe, glossary prompt, post-correction, (VAD)
+│   ├── tts/                # normalize, splitter, synthesis
+│   ├── bridge/             # base.py, clipboard.py, claude_cli.py
+│   ├── protocol.py         # định nghĩa message WebSocket
+│   └── app.py              # FastAPI entrypoint
+├── web/                    # frontend
+├── bench/                  # record.py, stt_bench.py, tts_bench.py
+├── tests/                  # pytest: normalize, splitter, post-correction
+├── data/
+│   ├── glossary.txt        # thuật ngữ + alias       (commit)
+│   ├── lexicon.tsv         # cách đọc cho TTS         (commit)
+│   ├── corrections.tsv     # sửa lỗi STT              (commit)
+│   ├── sentences.tsv       # 100 câu test (text)      (commit)
+│   └── testset/            # wav + transcripts.jsonl  (KHÔNG commit)
+├── models/                 # weights tải về / fine-tune (KHÔNG commit)
+├── voice/                  # Phase 6: dataset giọng   (KHÔNG commit audio)
+└── _local/                 # nháp, báo cáo benchmark, log (KHÔNG commit, .git/info/exclude)</pre>
+
+  <h3>Nguyên tắc</h3>
+  <ul>
+    <li><b>Đo trước, tối ưu sau.</b> Mọi quyết định chọn model đều dựa trên bộ test của Phase 0, không dựa trên cảm giác hay review trên mạng.</li>
+    <li><b>Claude bridge là lớp mỏng nhất.</b> Đổi Claude sang LLM khác không phải sửa STT/TTS.</li>
+    <li><b>Mỗi phase kết thúc bằng thứ chạy được.</b> Không làm dở dang nhiều phase cùng lúc.</li>
+    <li><b>Con số trong DoD là mục tiêu ban đầu.</b> Có baseline ở Phase 1 rồi chỉnh lại cho sát thực tế, và ghi lý do khi chỉnh.</li>
+  </ul>
+</section>
+
+<!-- ============ LỘ TRÌNH ============ -->
+<section id="roadmap">
+  <h2>Lộ trình</h2>
+  <p style="color:var(--muted);font-size:14px">Đơn vị: <b>buổi</b> ≈ 2–3 giờ làm tập trung. Ước lượng cho người làm một mình, có thể lệch ±50%.</p>
+  <div class="roadmap">
+    <div class="rm-row"><div class="ph">Phase 0</div><div class="rm-track"><span style="left:0;width:9%">Setup &amp; dataset</span></div><div class="dur">2–3 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 1</div><div class="rm-track"><span style="left:9%;width:12%">Benchmark STT</span></div><div class="dur">3–4 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 2</div><div class="rm-track"><span style="left:21%;width:12%">Server + Web STT</span></div><div class="dur">3–4 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 3</div><div class="rm-track"><span style="left:33%;width:17%">TTS</span></div><div class="dur">4–6 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 4</div><div class="rm-track"><span style="left:50%;width:17%">Bridge + dùng thật 3 tối</span></div><div class="dur">4–5 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 5</div><div class="rm-track"><span style="left:67%;width:18%">Hoàn thiện theo feedback</span></div><div class="dur">3–8 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 6</div><div class="rm-track"><span class="opt" style="left:85%;width:15%">Giọng của mình (tuỳ chọn)</span></div><div class="dur">4–8 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 7</div><div class="rm-track"><span style="left:67%;width:15%">Mọi thiết bị (song song 5/6)</span></div><div class="dur">3–5 buổi</div></div>
+  </div>
+
+  <h3>Mốc quan trọng</h3>
+  <table>
+    <tr><th>Mốc</th><th>Sau phase</th><th>Ý nghĩa</th></tr>
+    <tr><td>🧪 Có số liệu STT</td><td>1</td><td>Biết chính xác thuật ngữ nào hay sai, có cần fine-tune không</td></tr>
+    <tr><td>🎤 Nói ra chữ</td><td>2</td><td>Demo đầu tiên trên trình duyệt</td></tr>
+    <tr><td>🔊 Đọc thành tiếng</td><td>3</td><td>Trợ lý biết nói, chưa nối Claude</td></tr>
+    <tr><td>✅ <b>MVP dùng được</b></td><td>4a</td><td>Hỏi bằng giọng, nghe trả lời (bán tự động qua clipboard)</td></tr>
+    <tr><td>🚀 Rảnh tay</td><td>4b</td><td>Trọn vòng tự động, chỉ cần giữ Space để nói</td></tr>
+    <tr><td>📱 Mọi thiết bị</td><td>7</td><td>Dùng từ điện thoại qua 4G, có đăng nhập</td></tr>
+  </table>
+</section>
+
+<!-- ============ KHÁI NIỆM ============ -->
+<section id="concepts">
+  <h2>Khái niệm cần biết</h2>
+  <div class="concepts">
+    <div class="concept"><b>STT (Speech-to-Text)</b><p>Chuyển giọng nói thành chữ. Ở đây dùng họ model Whisper chạy local.</p></div>
+    <div class="concept"><b>TTS (Text-to-Speech)</b><p>Chuyển chữ thành giọng nói. Cần model hỗ trợ tiếng Việt và đọc ổn thuật ngữ tiếng Anh.</p></div>
+    <div class="concept"><b>Code-switching</b><p>Nói lẫn hai ngôn ngữ trong một câu: "cái <i>NAT Gateway</i> này khác <i>Internet Gateway</i> sao". Đây là phần khó nhất của dự án.</p></div>
+    <div class="concept"><b>WER (Word Error Rate)</b><p>Tỉ lệ từ sai = (thay thế + xoá + chèn) / số từ đúng. Càng thấp càng tốt. 10% nghĩa là cứ 10 từ sai 1.</p></div>
+    <div class="concept"><b>Term recall</b><p>Metric tự định nghĩa: số thuật ngữ nhận đúng / tổng số thuật ngữ. Quan trọng hơn WER vì sai thuật ngữ thì Claude hiểu sai câu hỏi.</p></div>
+    <div class="concept"><b>RTF (Real-Time Factor)</b><p>Thời gian xử lý / thời lượng audio. RTF 0.2 nghĩa là câu 10 giây xử lý mất 2 giây.</p></div>
+    <div class="concept"><b>VAD (Voice Activity Detection)</b><p>Tự phát hiện lúc bắt đầu và kết thúc nói. Để Phase 5; v1 dùng push-to-talk cho chắc.</p></div>
+    <div class="concept"><b>initial_prompt / hotwords</b><p>Đoạn text gợi ý đưa vào Whisper trước khi nhận dạng. Đưa glossary vào đây giúp model viết đúng thuật ngữ mà không cần train.</p></div>
+    <div class="concept"><b>Post-correction</b><p>Bảng thay thế sau STT: "nát gết uây" → "NAT Gateway". Rẻ, hiệu quả, nhưng dễ bị overfit nếu không kiểm tra trên tập riêng.</p></div>
+    <div class="concept"><b>Normalize (TTS)</b><p>Biến text "viết" thành text "đọc": bỏ markdown, đọc số, đọc viết tắt (<code>EC2</code> → "i xi hai").</p></div>
+    <div class="concept"><b>Barge-in (ngắt lời)</b><p>Đang đọc thì người dùng nói chen vào. Trợ lý phải dừng ngay và nghe.</p></div>
+    <div class="concept"><b>Held-out set</b><p>Phần dữ liệu test giữ riêng, không dùng khi chỉnh glossary/correction, để đo xem cải thiện có thật hay chỉ là học thuộc.</p></div>
+  </div>
+</section>
+
+<!-- ============ PHASE 0 ============ -->
+<section class="phase" id="phase0">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 0</span>
+      <h2>Setup &amp; bộ dữ liệu test</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>2–3 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>không</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Có môi trường chạy được GPU và <b>bộ test 100 câu ghi âm bằng giọng thật</b> để đo mọi thứ về sau.</div>
+
+  <div class="grid2">
+    <div class="box"><h4>Vì sao làm trước</h4>
+      <ul><li>Không có bộ test thì không so được model nào tốt hơn.</li>
+      <li>Bộ test phản ánh đúng cách <i>bạn</i> nói, đúng micro, đúng phòng. Benchmark công khai không làm được điều này.</li></ul></div>
+    <div class="box"><h4>Đầu ra</h4>
+      <ul><li><code>requirements.txt</code>, venv chạy được CUDA</li>
+      <li><code>data/glossary.txt</code>, <code>data/sentences.tsv</code></li>
+      <li><code>bench/record.py</code></li>
+      <li><code>data/testset/*.wav</code> + <code>transcripts.jsonl</code></li></ul></div>
+  </div>
+
+  <h3>TODO</h3>
+  <h4>A. Repo &amp; môi trường</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Tạo cấu trúc thư mục, <code>git init</code>, viết <code>.gitignore</code></span></label>
+      <div class="hint"><code>.gitignore</code>: <code>.venv/</code>, <code>data/testset/</code>, <code>models/</code>, <code>voice/**/*.wav</code>, <code>__pycache__/</code>, <code>node_modules/</code>. Thêm <code>_local/</code> vào <code>.git/info/exclude</code>.</div></li>
+    <li><label><input type="checkbox"><span class="t">Kiểm tra driver: <code>nvidia-smi</code> hiện phiên bản CUDA được hỗ trợ</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tạo venv Python 3.11, cài PyTorch bản CUDA khớp driver</span></label>
+      <div class="hint">Lấy lệnh cài trên pytorch.org theo CUDA version. Kiểm tra bằng <code>python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name())"</code>.</div></li>
+    <li><label><input type="checkbox"><span class="t">Cài <code>ffmpeg</code> và thêm vào PATH</span></label>
+      <div class="hint">Nhiều thư viện audio cần ffmpeg để đọc/ghi file. Cài bằng <code>winget install ffmpeg</code>.</div></li>
+    <li><label><input type="checkbox"><span class="t">Cài thư viện nền: <code>sounddevice</code>, <code>soundfile</code>, <code>numpy</code>, <code>jiwer</code>, <code>pynvml</code>; ghi vào <code>requirements.txt</code></span></label></li>
+  </ul>
+
+  <h4>B. Glossary thuật ngữ</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Viết <code>data/glossary.txt</code> với 100–200 thuật ngữ, chia nhóm</span></label>
+      <div class="hint">Nhóm gợi ý: AWS (VPC, NAT Gateway, Cognito, CloudFront, Lambda…), .NET (Dependency Injection, Scoped, Transient, Entity Framework, SignalR…), Networking, Database, DevOps, CS chung.
+      <br>Định dạng: mỗi dòng một thuật ngữ, có thể kèm alias: <code>NAT Gateway | nát gết uây | nat getway</code>. Alias để trống cũng được; Phase 1 sẽ điền từ lỗi thật.</div></li>
+    <li><label><input type="checkbox"><span class="t">Đánh dấu ~30 thuật ngữ quan trọng nhất (dùng nhiều nhất khi học)</span></label>
+      <div class="hint">Danh sách này sẽ dùng làm <code>initial_prompt</code>, vì Whisper chỉ nhận prompt ngắn (khoảng 224 token).</div></li>
+  </ul>
+
+  <h4>C. Soạn 100 câu test</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Viết <code>data/sentences.tsv</code> theo 4 nhóm (chủ đề: AWS, dev/.NET, TOEIC, IELTS)</span></label>
+      <div class="hint"><ul>
+        <li><b>vi</b>: 20 câu tiếng Việt thuần ("hôm nay mình ôn lại phần mạng nhé")</li>
+        <li><b>mix</b>: 40 câu Việt–Anh lẫn, gồm cả câu hỏi từ vựng ("phân biệt affect với effect giúp mình")</li>
+        <li><b>dense</b>: 20 câu dồn nhiều thuật ngữ, viết tắt ("EC2 trong private subnet đi ra ngoài qua NAT Gateway hay Internet Gateway")</li>
+        <li><b>en</b>: 20 câu <b>tiếng Anh hoàn toàn</b>, luyện IELTS/TOEIC ("I'd like to practice IELTS Speaking Part 1 with you")</li>
+      </ul>Cột: <code>id, group, split, text, terms</code> (terms cách nhau bằng <code>;</code>).</div></li>
+    <li><label><input type="checkbox"><span class="t">Viết theo đúng cách bạn <i>nói</i>, không phải cách viết</span></label>
+      <div class="hint">Giữ cả từ đệm "à", "kiểu", "cái này", câu hỏi cụt. Độ dài đa dạng, 3–15 giây.</div></li>
+    <li><label><input type="checkbox"><span class="t">Gán <code>terms</code> cho từng câu (các thuật ngữ phải nhận đúng)</span></label></li>
+  </ul>
+
+  <h4>D. Script ghi âm <code>bench/record.py</code></h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Hiện từng câu → Enter để bắt đầu ghi → Enter để dừng</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Lưu WAV 16kHz, mono, 16-bit; tên file theo id (<code>mix_017.wav</code>)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Sau mỗi câu: <code>r</code> nghe lại, <code>x</code> ghi lại, <code>s</code> bỏ qua</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chạy lại được: bỏ qua câu đã ghi, ghi tiếp từ chỗ dừng</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ghi <code>transcripts.jsonl</code>: <code>{"id","file","text","terms","group","duration"}</code></span></label></li>
+  </ul>
+
+  <h4>E. Ghi âm</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Ghi đủ 100 câu bằng <b>tai nghe</b> (micro sẽ dùng thật), trong phòng học buổi tối</span></label>
+      <div class="hint">Nên chia 2 lần ghi vào 2 ngày khác nhau: giọng mỗi ngày khác nhau một chút, dữ liệu sẽ sát thực tế hơn.</div></li>
+    <li><label><input type="checkbox"><span class="t">Chia tập: đánh dấu 70 câu <code>dev</code>, 30 câu <code>holdout</code> (phân bố đều các nhóm)</span></label>
+      <div class="hint">Chỉ chỉnh glossary/correction dựa trên <code>dev</code>. <code>holdout</code> dùng để kiểm chứng ở Phase 1.</div></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t"><code>torch.cuda.is_available()</code> trả về <span class="metric">True</span> trong venv</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><span class="metric">100</span> file wav + <code>transcripts.jsonl</code> khớp 1-1, mỗi câu có <code>terms</code> và <code>split</code> (dev/holdout)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Nghe lại ngẫu nhiên 10 file: không bị cắt đầu/cuối, không rè, âm lượng đủ</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Glossary có ít nhất <span class="metric">100</span> thuật ngữ, 30 cái được đánh dấu ưu tiên</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Commit đầu tiên: code + glossary + sentences, không có file audio</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Đọc như đọc sách, không giống lúc hỏi thật</td><td>Đọc câu một lần trong đầu rồi nói lại theo ý, không nhìn chữ. Transcript sửa theo câu đã nói.</td></tr>
+    <tr><td>PyTorch không nhận GPU</td><td>Cài lại đúng bản CUDA; kiểm tra không có bản CPU-only bị cài chồng.</td></tr>
+    <tr><td>Micro thu tạp âm (quạt, bàn phím)</td><td>Ghi thật như vậy. Bộ test phải phản ánh điều kiện dùng thật.</td></tr>
+  </table>
+</section>
+
+<!-- ============ PHASE 1 ============ -->
+<section class="phase" id="phase1">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 1</span>
+      <h2>Benchmark STT</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>3–4 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 0</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Chọn được <b>cấu hình STT tốt nhất</b> cho tiếng Việt + thuật ngữ tiếng Anh, có số liệu chứng minh, và quyết định <b>có cần fine-tune hay không</b>.</div>
+
+  <div class="grid2">
+    <div class="box"><h4>Vì sao quan trọng nhất</h4>
+      <ul><li>STT sai thuật ngữ → Claude trả lời sai câu hỏi → cả hệ thống vô dụng.</li>
+      <li>Fine-tune tốn công. Phải chứng minh prompt + sửa lỗi chưa đủ thì mới làm.</li></ul></div>
+    <div class="box"><h4>Đầu ra</h4>
+      <ul><li><code>bench/stt_bench.py</code> + file config từng lần chạy</li>
+      <li><code>data/corrections.tsv</code></li>
+      <li><code>_local/stt_report.md</code>: bảng so sánh + quyết định</li>
+      <li>Module <code>server/stt/</code> dùng chung cho server sau này</li></ul></div>
+  </div>
+
+  <h3>TODO</h3>
+  <h4>A. Khung benchmark</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Viết code nhận dạng trong <code>server/stt/</code>; <code>bench/</code> chỉ import và gọi</span></label>
+      <div class="hint">Để code benchmark và code chạy thật là một. Model thắng benchmark cũng là model chạy trong server.</div></li>
+    <li><label><input type="checkbox"><span class="t">Mỗi lần chạy mô tả bằng một config (model, compute_type, language, beam_size, prompt, corrections)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Hàm chuẩn hoá text trước khi so: Unicode NFC, lowercase, bỏ dấu câu, gộp khoảng trắng</span></label>
+      <div class="hint"><b>NFC rất quan trọng với tiếng Việt</b>: cùng chữ "ố" có thể được mã hoá theo 2 cách, trông giống nhau nhưng so sánh ra khác nhau.</div></li>
+    <li><label><input type="checkbox"><span class="t">Metric: WER (<code>jiwer</code>), term recall, RTF, VRAM đỉnh</span></label>
+      <div class="hint">Term recall: thuật ngữ (đã chuẩn hoá) xuất hiện trong kết quả thì tính là đúng. VRAM: dùng <code>pynvml</code> vì faster-whisper (CTranslate2) không cấp phát qua PyTorch nên <code>torch.cuda.max_memory_allocated</code> không thấy.</div></li>
+    <li><label><input type="checkbox"><span class="t">Xuất CSV từng câu (ref, hyp, WER, terms sai) + bảng tổng theo nhóm vi/mix/dense và dev/holdout</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Warm-up 1 câu trước khi đo thời gian (lần chạy đầu luôn chậm)</span></label></li>
+  </ul>
+
+  <h4>B. Các cấu hình cần chạy</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t"><b>Baseline</b>: faster-whisper <code>large-v3</code>, int8_float16, <code>language="vi"</code>, không prompt</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Như trên + <code>initial_prompt</code> = 30 thuật ngữ ưu tiên</span></label>
+      <div class="hint">Viết prompt dạng câu tự nhiên giống văn cần nhận dạng, ví dụ "Hôm nay mình học về NAT Gateway, Internet Gateway, Dependency Injection, Scoped, Transient…", thường tốt hơn liệt kê khô. Thử cả hai cách.</div></li>
+    <li><label><input type="checkbox"><span class="t">Như trên + <code>hotwords</code> (nếu bản faster-whisper đang dùng hỗ trợ)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">So sánh 3 chiến lược ngôn ngữ: <code>language="vi"</code> cố định / tự nhận diện / hai lượt (detect trước rồi nhận dạng)</span></label>
+      <div class="hint"><b>Đây là điểm khó vì bạn có cả câu tiếng Anh hoàn toàn (nhóm <code>en</code>).</b> Ép <code>vi</code> thì câu mix tốt nhưng câu tiếng Anh dễ bị Việt hoá; để tự nhận diện thì câu mix có thể bị nhảy sang tiếng Anh, thậm chí bị dịch. Xem kết quả theo từng nhóm, không chỉ con số tổng. Phương án dự phòng: nút chọn chế độ "Việt / English" trên UI.</div></li>
+    <li><label><input type="checkbox"><span class="t"><code>large-v3-turbo</code> (có/không prompt): nhanh hơn, xem có mất chính xác không</span></label></li>
+    <li><label><input type="checkbox"><span class="t">PhoWhisper (large): mạnh tiếng Việt, cần xem phần thuật ngữ tiếng Anh</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><code>beam_size</code> 1 so với 5 trên cấu hình tốt nhất (đánh đổi tốc độ/chính xác)</span></label></li>
+  </ul>
+
+  <h4>C. Phân tích lỗi &amp; post-correction</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Liệt kê top 20 thuật ngữ hay sai nhất (chỉ trên tập <code>dev</code>)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Phân loại lỗi</span></label>
+      <div class="hint"><ul>
+        <li><b>Việt hoá phiên âm</b>: "nát gết uây"</li>
+        <li><b>Tách/gộp sai</b>: "Cloud Front", "dot net" ↔ ".NET"</li>
+        <li><b>Nhầm từ gần âm</b>: "scope" ↔ "scoped", "lam đa" ↔ "Lambda"</li>
+        <li><b>Chỉ sai hoa/thường</b>: không quan trọng với Claude, bỏ qua được</li>
+      </ul></div></li>
+    <li><label><input type="checkbox"><span class="t">Viết <code>data/corrections.tsv</code> (pattern → thay thế), áp dụng theo ranh giới từ, không phân biệt hoa/thường</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Viết pytest cho post-correction (không thay nhầm bên trong từ khác)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chạy lại, so sánh term recall trên <code>dev</code> <b>và</b> <code>holdout</code></span></label>
+      <div class="hint">Nếu <code>dev</code> tăng mạnh mà <code>holdout</code> gần như không đổi nghĩa là correction đang học thuộc các câu cụ thể, chưa tổng quát.</div></li>
+  </ul>
+
+  <h4>D. Báo cáo</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Viết <code>_local/stt_report.md</code>: bảng so sánh, cấu hình chọn, lý do, các lỗi còn lại</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chỉnh lại con số DoD cho các phase sau dựa trên baseline thực tế</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Bảng so sánh ≥ <span class="metric">4</span> cấu hình trên cùng testset, cùng metric</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Term recall nhóm <code>mix</code> trên <b>holdout</b> ≥ <span class="metric">90%</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">WER toàn bộ ≤ <span class="metric">15%</span>; WER nhóm <code>en</code> ≤ <span class="metric">10%</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">RTF ≤ <span class="metric">0.3</span> trên RTX 3060 (câu 10 giây xử lý ≤ 3 giây)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">VRAM STT ≤ <span class="metric">5GB</span> (chừa chỗ cho TTS)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Báo cáo có kết luận rõ: <b>fine-tune / không fine-tune</b></span></label></li>
+  </ul>
+
+  <div class="gate"><b class="t">🚦 Điểm quyết định: có fine-tune STT không?</b>
+    <ul style="margin:6px 0 0">
+      <li>Term recall holdout ≥ 90% → <b>không fine-tune</b>, đi tiếp Phase 2.</li>
+      <li>80–90% → đi tiếp, bổ sung correction khi dùng thật, xem lại ở Phase 5.</li>
+      <li>&lt; 80% sau khi đã có prompt + correction → đưa <b>fine-tune LoRA</b> vào Phase 5, và ghi thêm dữ liệu từ bây giờ.</li>
+    </ul>
+  </div>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Prompt quá dài làm model ảo giác, lặp lại chữ trong prompt</td><td>Giữ prompt ngắn, kiểm tra các câu tiếng Việt thuần có bị chèn thuật ngữ lạ không.</td></tr>
+    <tr><td>Correction overfit</td><td>Chia dev/holdout; chỉ thêm rule xuất hiện ≥ 2 lần.</td></tr>
+    <tr><td>PhoWhisper cần pipeline khác (transformers)</td><td>Bọc sau cùng một interface <code>transcribe(audio) -&gt; text</code> để benchmark chung.</td></tr>
+  </table>
+</section>
+
+<!-- ============ PHASE 2 ============ -->
+<section class="phase" id="phase2">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 2</span>
+      <h2>Voice server + Web push-to-talk</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>3–4 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 1</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Giữ Space nói vào trình duyệt, thả ra là <b>thấy text hiện lên</b>.</div>
+
+  <div class="grid2">
+    <div class="box"><h4>Vì sao</h4>
+      <ul><li>Dựng khung server ↔ web mà mọi phase sau đều dùng.</li>
+      <li>Kiểm tra chất lượng STT khi đi qua trình duyệt, khác với file WAV sạch.</li></ul></div>
+    <div class="box"><h4>Đầu ra</h4>
+      <ul><li><code>server/app.py</code>, <code>server/protocol.py</code></li>
+      <li><code>web/</code>: trang push-to-talk</li>
+      <li>Log mỗi lượt vào <code>_local/logs/</code></li></ul></div>
+  </div>
+
+  <h3>Protocol WebSocket (bản đầu)</h3>
+<pre>Client → Server
+  {"type": "start"}                       bắt đầu một lượt nói
+  &lt;binary&gt;                                PCM int16, 16kHz, mono, ~100ms/frame
+  {"type": "stop"}                        kết thúc lượt nói
+  {"type": "cancel"}                      huỷ lượt hiện tại
+
+Server → Client
+  {"type": "state", "value": "TRANSCRIBING"}
+  {"type": "transcript", "text": "...", "audio_ms": 8400, "stt_ms": 1350}
+  {"type": "error", "code": "stt_failed", "message": "..."}</pre>
+  <p style="font-size:14px;color:var(--muted)">Phase 3 và 4 sẽ thêm <code>audio_chunk</code>, <code>response_text</code>, <code>ask</code>. Mọi message định nghĩa ở <code>protocol.py</code>.</p>
+
+  <h3>TODO</h3>
+  <h4>A. Server</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">FastAPI + uvicorn, endpoint <code>/ws</code> và <code>/health</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Load model STT trong <code>lifespan</code> lúc khởi động, chạy warm-up</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chạy transcribe trong thread pool (<code>run_in_executor</code>) để không chặn event loop</span></label>
+      <div class="hint">Nếu không, trong lúc nhận dạng server sẽ không gửi/nhận được message nào khác (kể cả <code>cancel</code>).</div></li>
+    <li><label><input type="checkbox"><span class="t">Khoá GPU (<code>asyncio.Lock</code>): mỗi lúc chỉ một lượt dùng model</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Áp post-correction từ <code>data/corrections.tsv</code> (đọc lại khi file đổi, không cần restart)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Bỏ qua lượt nói quá ngắn (&lt; 0.3 giây): bấm nhầm</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Log JSONL mỗi lượt: thời điểm, audio_ms, stt_ms, text; tuỳ chọn lưu wav để làm dữ liệu sau này</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Config qua một file (<code>config.toml</code> hoặc <code>.env</code>): model, device, port</span></label></li>
+  </ul>
+
+  <h4>B. Web</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Chọn stack: Vite + React + TypeScript (gợi ý) hoặc HTML/JS thuần</span></label>
+      <div class="hint">React dễ mở rộng UI khi có lịch sử, cài đặt, nhiều trạng thái. HTML thuần nhanh hơn cho v1. Chọn một và giữ nguyên.</div></li>
+    <li><label><input type="checkbox"><span class="t"><code>getUserMedia</code> → AudioWorklet → resample về 16kHz → Int16 → gửi theo frame ~100ms</span></label>
+      <div class="hint">Trình duyệt thường thu ở 48kHz. <code>localhost</code> được coi là secure context nên xin quyền mic được, không cần HTTPS.</div></li>
+    <li><label><input type="checkbox"><span class="t">Thử bật/tắt <code>echoCancellation</code>, <code>noiseSuppression</code>, <code>autoGainControl</code>, giữ lựa chọn cho kết quả tốt hơn</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Push-to-talk: giữ Space (hoặc giữ nút 🎤), thả ra thì gửi <code>stop</code></span></label>
+      <div class="hint">Không bắt phím Space khi đang gõ trong ô text. Tránh auto-repeat của phím (sự kiện <code>keydown</code> lặp lại).</div></li>
+    <li><label><input type="checkbox"><span class="t">State machine phía client: <code>IDLE → LISTENING → TRANSCRIBING → IDLE</code> + <code>ERROR</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">UI: chấm trạng thái có màu, mức âm lượng mic (để biết mic đang thu), transcript sửa tay được, độ trễ của lượt vừa rồi</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tự kết nối lại WebSocket (backoff 1s → 2s → 5s), hiện trạng thái kết nối</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Lịch sử các lượt trong phiên (chỉ lưu trong bộ nhớ trình duyệt)</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Nói 10 câu từ testset qua web: chất lượng tương đương benchmark (lệch term recall ≤ 5%)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Thả phím → thấy text ≤ <span class="metric">2 giây</span> với câu ~10 giây</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tắt rồi bật lại server: web tự kết nối lại, không phải reload trang</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chạy liên tục <span class="metric">1 giờ</span>, <span class="metric">50</span> lượt nói: VRAM không tăng dần</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Khởi động server bằng một lệnh, có hướng dẫn trong README</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Chất lượng qua web kém hơn file WAV</td><td>Lưu audio server nhận được ra file, nghe lại và đưa qua benchmark để biết lỗi nằm ở resample hay mic processing.</td></tr>
+    <tr><td>Mất đầu câu do bấm phím trễ hơn lúc bắt đầu nói</td><td>Thu mic liên tục vào buffer vòng ~300ms, khi bấm thì gửi kèm phần buffer đó.</td></tr>
+  </table>
+</section>
+
+<!-- ============ PHASE 3 ============ -->
+<section class="phase" id="phase3">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 3</span>
+      <h2>TTS</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>4–6 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 2</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Đọc câu trả lời tiếng Việt có thuật ngữ tiếng Anh <b>tự nhiên, nghe dễ chịu, có tiếng sớm</b>, và dừng được ngay.</div>
+
+  <div class="grid2">
+    <div class="box"><h4>Phần khó thật sự</h4>
+      <ul><li>Không nằm ở model mà ở <b>text đưa vào</b>: markdown, code, viết tắt, số.</li>
+      <li>Cách xử lý hiệu quả nhất là bảo Claude trả lời theo văn nói ngay từ đầu.</li></ul></div>
+    <div class="box"><h4>Đầu ra</h4>
+      <ul><li><code>server/tts/normalize.py</code>, <code>splitter.py</code>, <code>synth.py</code></li>
+      <li><code>data/lexicon.tsv</code>, <code>bench/tts_samples.txt</code></li>
+      <li><code>_local/tts_report.md</code>: bảng điểm model</li>
+      <li>Instruction văn nói cho Claude</li></ul></div>
+  </div>
+
+  <h3>Thứ tự normalize</h3>
+  <div class="flow">
+    <div class="node tts">Code block<small>→ "đoạn code trên màn hình"</small></div><span class="arrow">→</span>
+    <div class="node tts">Markdown<small>bỏ **, #, -, bảng</small></div><span class="arrow">→</span>
+    <div class="node tts">URL / path<small>bỏ hoặc đọc tên miền</small></div><span class="arrow">→</span>
+    <div class="node tts">Lexicon<small>EC2, .NET, S3…</small></div><span class="arrow">→</span>
+    <div class="node tts">Số &amp; đơn vị<small>12GB, v3.11, 99.9%</small></div><span class="arrow">→</span>
+    <div class="node tts">Dọn khoảng trắng</div>
+  </div>
+  <p style="font-size:14px;color:var(--muted)">Lexicon phải chạy <b>trước</b> phần đọc số; nếu không, <code>EC2</code> sẽ bị đọc thành "E C hai" trước khi kịp tra lexicon.</p>
+
+  <h3>TODO</h3>
+  <h4>A. Dữ liệu mẫu</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Soạn <code>bench/tts_samples.txt</code>: 30 đoạn giống câu trả lời Claude</span></label>
+      <div class="hint">Gồm: 10 đoạn văn nói sạch, 10 đoạn nhiều thuật ngữ/viết tắt, 10 đoạn "bẩn" có markdown, code, link, số. Lấy luôn từ các câu trả lời thật của Claude khi bạn học.</div></li>
+  </ul>
+
+  <h4>B. Normalize</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Xử lý code block và inline code</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Bỏ markdown: heading, bold/italic, bullet, bảng (đọc từng hàng hoặc bỏ qua)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Viết <code>data/lexicon.tsv</code>: thuật ngữ → cách đọc</span></label>
+      <div class="hint">Thử 2 kiểu cho từng từ rồi nghe cái nào tự nhiên hơn: để nguyên tiếng Anh (<code>Gateway</code>) hoặc phiên âm Việt (<code>gết uây</code>). Viết tắt thường đọc từng chữ cái theo kiểu người Việt hay nói: <code>EC2 → i xi hai</code>, <code>S3 → ét ba</code>, <code>.NET → đót nét</code>.</div></li>
+    <li><label><input type="checkbox"><span class="t">Đọc số, phần trăm, đơn vị, phiên bản</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Pytest ≥ <b>30</b> ca cho normalize (input → output mong đợi)</span></label></li>
+  </ul>
+
+  <h4>C. Chọn model TTS</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Khảo sát model TTS tiếng Việt chạy local <b>tại thời điểm làm</b>, chọn 2–3 ứng viên</span></label>
+      <div class="hint">Ứng viên tham khảo: các bản fine-tune tiếng Việt của XTTS-v2 và F5-TTS, cùng các model TTS tiếng Việt mới hơn. Tiêu chí: hỗ trợ tiếng Việt, license cho dùng cá nhân, VRAM, tốc độ, <b>có clone giọng được không</b> (để dùng cho Phase 6).</div></li>
+    <li><label><input type="checkbox"><span class="t">Viết <code>bench/tts_bench.py</code>: sinh audio 30 đoạn × mỗi model, đo thời gian và VRAM</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chấm điểm mù (trộn thứ tự, ẩn tên model), thang 1–5 cho 3 tiêu chí: tự nhiên, phát âm thuật ngữ, ngắt nghỉ</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Xử lý <b>câu tiếng Anh hoàn toàn</b> (câu mẫu IELTS, câu đã sửa ngữ pháp)</span></label>
+      <div class="hint">Học tiếng Anh mà nghe giọng Việt đọc câu mẫu tiếng Anh thì phản tác dụng. Hai hướng: model song ngữ đọc tốt cả hai thứ tiếng, hoặc nhận diện ngôn ngữ từng câu rồi chuyển sang một giọng TTS tiếng Anh riêng. Thêm 5 đoạn tiếng Anh vào bộ mẫu để chấm.</div></li>
+    <li><label><input type="checkbox"><span class="t">Ghi bảng điểm và lựa chọn vào <code>_local/tts_report.md</code></span></label></li>
+  </ul>
+
+  <h4>D. Tách câu &amp; streaming</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Splitter: tách ở <code>. ? ! ;</code> và xuống dòng; gộp câu &lt; 20 ký tự; câu &gt; 200 ký tự thì cắt ở dấu phẩy</span></label>
+      <div class="hint">Không tách nhầm ở số thập phân (<code>3.11</code>), viết tắt (<code>v.v.</code>, <code>e.g.</code>), tên file (<code>app.py</code>). Mẹo giảm độ trễ: cho câu đầu tiên ngắn hơn bình thường.</div></li>
+    <li><label><input type="checkbox"><span class="t">Pipeline: tổng hợp câu n+1 trong khi web đang phát câu n</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Gửi audio theo chunk kèm <code>sentence_id</code>; message <code>speak_end</code> khi hết</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Web: audio queue bằng Web Audio API, phát liền mạch giữa các câu</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Nút ⏹: xoá queue, dừng source đang phát, gửi <code>cancel</code> để server ngừng tổng hợp</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ô nhập text tạm trên web để test TTS (chưa có Claude)</span></label></li>
+  </ul>
+
+  <h4>E. Instruction văn nói cho Claude</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Viết instruction, đặt vào Claude Project (dùng lại cho <code>claude -p</code> ở Phase 4)</span></label>
+<pre style="white-space:pre-wrap">Câu trả lời của bạn sẽ được đọc thành tiếng cho tôi nghe.
+- Viết như đang nói chuyện, bằng tiếng Việt; giữ thuật ngữ kỹ thuật bằng tiếng Anh.
+- Không dùng markdown, bảng, gạch đầu dòng, emoji hay code block.
+- Tối đa khoảng 150 từ. Nếu chủ đề dài, trả lời ý chính trước rồi hỏi tôi có muốn đi sâu không.
+- Nếu bắt buộc phải có code, nói "tôi để code trên màn hình" và đặt code ở cuối, sau dòng "---CODE---".</pre></li>
+    <li><label><input type="checkbox"><span class="t">Normalize hiểu dấu <code>---CODE---</code>: chỉ đọc phần trước đó</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Có bảng điểm ≥ <span class="metric">2</span> model trên 30 đoạn mẫu, đã chọn 1 model</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Model chọn có điểm phát âm thuật ngữ trung bình ≥ <span class="metric">3.5/5</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Có text → nghe câu đầu tiên ≤ <span class="metric">1.5 giây</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Không có khoảng lặng &gt; <span class="metric">0.5 giây</span> giữa các câu khi đọc đoạn dài</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Bấm ⏹ → im lặng ≤ <span class="metric">200ms</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">STT + TTS cùng nằm trên GPU, tổng VRAM ≤ <span class="metric">11GB</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">30 pytest normalize pass; 10 đoạn "bẩn" đọc ra không còn ký hiệu nào</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Model đọc từ tiếng Anh theo âm Việt rất khó nghe</td><td>Phiên âm qua lexicon; với model clone giọng được, chọn audio tham chiếu có cả từ tiếng Anh.</td></tr>
+    <tr><td>Không đủ VRAM cho cả hai model</td><td>Chuyển STT sang <code>large-v3-turbo</code> hoặc int8; phương án cuối là chạy TTS bằng CPU (chậm hơn).</td></tr>
+    <tr><td>License model không cho phép sử dụng</td><td>Dùng cá nhân thường không sao, nhưng vẫn ghi license vào report để nhớ nếu sau này chia sẻ.</td></tr>
+  </table>
+</section>
+
+<!-- ============ PHASE 4 ============ -->
+<section class="phase" id="phase4">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 4</span>
+      <h2>Claude bridge — chạy trọn vòng</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>4a: 1 buổi · 4b: 3–4 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 2, 3</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Hỏi bằng giọng nói, nghe Claude trả lời, <b>dùng được thật mỗi buổi tối</b>.</div>
+
+  <h3>Interface chung</h3>
+<pre>class Bridge(Protocol):
+    async def ask(self, text: str) -&gt; AsyncIterator[str]: ...   # stream từng đoạn text
+    async def new_session(self) -&gt; None: ...
+    async def cancel(self) -&gt; None: ...</pre>
+  <p style="font-size:14px;color:var(--muted)">Chọn bridge qua config. STT/TTS chỉ biết interface này.</p>
+
+  <h3>TODO</h3>
+  <h4>4a. Clipboard bridge — MVP</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">STT xong → tự copy transcript vào clipboard (web dùng <code>navigator.clipboard.writeText</code>)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Hotkey toàn cục (ví dụ <code>Ctrl+Alt+R</code>) do server lắng nghe → đọc clipboard → normalize → TTS</span></label>
+      <div class="hint">Dùng <code>pynput</code> hoặc <code>keyboard</code> trên Windows. Phương án dự phòng: nút "Đọc clipboard" trên web.</div></li>
+    <li><label><input type="checkbox"><span class="t">Trạng thái <code>WAITING_CLAUDE</code> hiện trên UI từ lúc copy đến lúc nhận hotkey</span></label></li>
+  </ul>
+
+  <h4>4b. Claude Code headless</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Đọc lại điều khoản sử dụng subscription cho cách dùng này; kiểm tra các flag bằng <code>claude --help</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tạo thư mục làm việc riêng cho Claude (<code>_local/claude-workdir/</code>), không chạy trong repo</span></label>
+      <div class="hint">Để Claude không đọc hay sửa code của dự án khi đang trả lời câu hỏi học.</div></li>
+    <li><label><input type="checkbox"><span class="t">Giới hạn công cụ: chỉ cho <code>WebSearch</code>, <code>WebFetch</code> (<code>--allowedTools</code>)</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><code>ClaudeCliBridge</code>: chạy <code>claude -p</code> bằng <code>asyncio.create_subprocess_exec</code>, <code>--output-format stream-json</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Lấy <code>session_id</code> từ lượt đầu; các lượt sau dùng <code>--resume &lt;session_id&gt;</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Đưa instruction văn nói qua <code>--append-system-prompt</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Parse stream → đẩy từng đoạn text vào splitter → TTS đọc câu đầu khi Claude chưa viết xong</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Xử lý lỗi: chưa đăng nhập, hết hạn mức subscription, timeout (ví dụ 120s) → đọc thông báo lỗi bằng giọng nói</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ngắt: bấm ⏹ hoặc nói câu mới → kill subprocess</span></label></li>
+    <li><label><input type="checkbox"><span class="t">UI: nút "Session mới", hiện text câu trả lời bên dưới transcript, tách phần code (<code>---CODE---</code>) ra khung riêng</span></label></li>
+  </ul>
+
+  <h4>Chung</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Log session <code>_local/sessions/YYYY-MM-DD.jsonl</code>: câu hỏi, transcript, response, thời gian từng bước</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tạo <code>_local/feedback.md</code>, ghi ngay mỗi khi thấy khó chịu lúc dùng</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t"><b>4a</b>: một lượt hỏi–đáp chỉ cần giữ Space nói → paste vào claude.ai → bấm hotkey</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>4b</b>: một lượt hỏi–đáp không cần chạm chuột/bàn phím ngoài push-to-talk</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>4b</b>: câu thứ 3 tham chiếu được câu thứ 1 ("cái đó khác gì cái lúc nãy?")</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>4b</b>: thả phím → nghe câu đầu ≤ <span class="metric">8 giây</span> (câu hỏi không cần research)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Đổi bridge clipboard ↔ CLI chỉ bằng config</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>Dùng thật <span class="metric">3</span> buổi tối liên tiếp</b>, <code>feedback.md</code> có ≥ 5 mục</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td><code>claude -p</code> khởi động chậm vài giây mỗi lượt</td><td>Đo riêng thời gian khởi động; nếu quá chậm thì xem cách giữ một tiến trình chạy lâu (Agent SDK, input dạng stream).</td></tr>
+    <tr><td>Hết hạn mức subscription giữa buổi học</td><td>Đọc thông báo rõ ràng; có thể chuyển về clipboard bridge.</td></tr>
+    <tr><td>Claude vẫn trả lời dài, có markdown</td><td>Normalize vẫn xử lý được; chỉnh instruction theo log thực tế.</td></tr>
+  </table>
+</section>
+
+<!-- ============ PHASE 5 ============ -->
+<section class="phase" id="phase5">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 5</span>
+      <h2>Hoàn thiện trải nghiệm</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>3–8 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 4 + feedback</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Sửa những gì việc <b>dùng thật</b> chỉ ra. Ưu tiên theo <code>feedback.md</code>, <b>không cần làm hết</b> danh sách dưới đây.</div>
+
+  <div class="note">Cách chọn việc: với mỗi mục trong <code>feedback.md</code>, ghi (1) bao nhiêu lần gặp mỗi buổi, (2) khó chịu cỡ nào 1–3. Làm theo thứ tự tích hai số từ cao xuống thấp.</div>
+
+  <h3>TODO (chọn theo feedback)</h3>
+  <h4>Tương tác</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t"><b>Ngắt lời</b>: bấm 🎤 khi đang <code>SPEAKING</code> → dừng đọc, huỷ Claude đang chạy, chuyển sang <code>LISTENING</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>VAD (Silero)</b> cho chế độ rảnh tay: tự phát hiện bắt đầu/kết thúc câu</span></label>
+      <div class="hint">Tham số cần chỉnh: ngưỡng xác suất, thời gian im lặng để kết thúc (~700ms), độ dài tối thiểu. Khi đang SPEAKING thì phải tắt VAD hoặc dùng tai nghe, nếu không trợ lý sẽ nghe chính tiếng loa của mình.</div></li>
+    <li><label><input type="checkbox"><span class="t">Nút "đọc lại", "đọc chậm", chỉnh tốc độ đọc</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Lệnh giọng nói đơn giản: "dừng", "đọc lại", "session mới"</span></label></li>
+  </ul>
+  <h4>Chất lượng STT</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Bổ sung glossary + corrections từ lỗi trong log thật</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Đưa 50–100 câu từ log thật (có lưu wav) vào testset, chạy lại benchmark</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>Fine-tune LoRA</b> cho Whisper (chỉ khi Phase 1 kết luận cần)</span></label>
+      <div class="hint">Cần ≥ 1–2 giờ audio giọng bạn có transcript chuẩn. Đánh giá trên holdout, kiểm tra tiếng Việt thuần không bị kém đi.</div></li>
+  </ul>
+  <h4>Vận hành</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Script khởi động một lệnh: chạy server + mở trình duyệt</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Trang thống kê nhỏ: độ trễ trung bình từng bước theo ngày</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Mỗi mục đã làm có số liệu trước/sau (term recall, độ trễ, hoặc số lần gặp trong feedback)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Term recall trên testset mở rộng ≥ <span class="metric">95%</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ngắt lời: bấm → im lặng ≤ <span class="metric">200ms</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">VAD (nếu làm): 20 lượt nói tự nhiên → ≤ <span class="metric">1</span> lần cắt giữa câu, ≤ <span class="metric">1</span> lần kích hoạt nhầm</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Khởi động toàn bộ bằng <span class="metric">1</span> lệnh</span></label></li>
+  </ul>
+</section>
+
+<!-- ============ PHASE 6 ============ -->
+<section class="phase" id="phase6">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 6 · TUỲ CHỌN</span>
+      <h2>Giọng của chính mình</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>4–8 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 3</b></span>
+        <span class="chip">Dùng chung: <b>dự án narration</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Trợ lý đọc bằng <b>giọng của bạn</b>, chất lượng không kém giọng mặc định. Dataset và model tái sử dụng được cho narration.</div>
+
+  <h3>TODO</h3>
+  <h4>A. Zero-shot trước</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Ghi 3–5 đoạn tham chiếu (10–20 giây), có cả từ tiếng Anh, phòng yên tĩnh</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Thử clone zero-shot bằng model đã chọn ở Phase 3, chạy lại 30 đoạn mẫu</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chấm mù cùng thang điểm Phase 3. Đạt rồi thì <b>dừng ở đây</b></span></label></li>
+  </ul>
+  <h4>B. Fine-tune (nếu zero-shot chưa đủ)</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Soạn kịch bản ghi âm 30–60 phút: câu đa dạng, có thuật ngữ, có câu hỏi, có câu cảm thán</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ghi âm vào <code>voice/raw/</code>: cùng micro, cùng phòng, chia nhiều buổi ngắn để giọng không mệt</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Làm sạch: cắt câu, bỏ khoảng lặng thừa, chuẩn hoá âm lượng, kiểm tra transcript (có thể dùng STT của Phase 1 rồi sửa tay)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Fine-tune theo hướng dẫn của model, lưu checkpoint vào <code>voice/models/</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Chấm mù: giọng clone với giọng mặc định trên 30 đoạn mẫu</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Điểm phát âm thuật ngữ của giọng clone ≥ giọng mặc định</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Nghe câu đầu vẫn ≤ <span class="metric">1.5 giây</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Nghe <span class="metric">10</span> đoạn liên tục: không méo tiếng, không lạc giọng, không đọc sai ngôn ngữ</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Dataset + model nằm trong <code>voice/</code>, có README về cách dùng lại cho narration</span></label></li>
+  </ul>
+</section>
+
+<!-- ============ PHASE 7 ============ -->
+<section class="phase" id="phase7">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 7</span>
+      <h2>Dùng từ mọi thiết bị</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>3–5 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 4b</b></span>
+        <span class="chip">Làm song song được với: <b>Phase 5, 6</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Điện thoại, laptop, tablet đều dùng được trợ lý. Model vẫn chạy trên <b>máy RTX 3060 ở nhà</b>, các thiết bị khác chỉ là micro + loa.</div>
+
+  <div class="flow">
+    <div class="node web">📱 Điện thoại / laptop<small>trình duyệt / PWA</small></div><span class="arrow">→</span>
+    <div class="node web">HTTPS + đăng nhập<small>Tailscale / Cloudflare</small></div><span class="arrow">→</span>
+    <div class="node stt">Voice Server<small>PC ở nhà, GPU</small></div><span class="arrow">→</span>
+    <div class="node llm">claude -p<small>trên PC</small></div>
+  </div>
+
+  <div class="note warn"><b>Ảnh hưởng ngay từ các phase trước:</b>
+    <ul style="margin:4px 0 0">
+      <li>Phase 2: web phải <b>responsive</b> và có <b>nút giữ để nói</b>, không chỉ dựa vào phím Space.</li>
+      <li>Phase 2: <code>getUserMedia</code> chỉ chạy trên <b>HTTPS</b> (trừ localhost). Dùng từ thiết bị khác là phải có HTTPS.</li>
+      <li>Phase 4: clipboard bridge không dùng được trên điện thoại. Muốn dùng từ xa thì <b>bắt buộc có 4b</b>.</li>
+    </ul>
+  </div>
+
+  <h3>TODO</h3>
+  <h4>A. Truy cập an toàn</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t"><b>Bước 1: Tailscale</b>. Cài lên PC và điện thoại, dùng <code>tailscale serve</code> để có HTTPS</span></label>
+      <div class="hint">Chỉ các thiết bị trong tailnet của bạn mới thấy server. Không mở port router, không lộ ra Internet. Với nhu cầu "mọi thiết bị của mình" thì đây là đủ.</div></li>
+    <li><label><input type="checkbox"><span class="t"><b>Bước 2 (chỉ khi cần public thật)</b>: Cloudflare Tunnel + Cloudflare Access (đăng nhập bằng email)</span></label>
+      <div class="hint">Dùng khi cần truy cập từ máy không cài được Tailscale (máy công ty...).</div></li>
+    <li><label><input type="checkbox"><span class="t">Xác thực ở chính server (token/cookie), kiểm tra cả khi mở WebSocket</span></label>
+      <div class="hint">Phòng nhiều lớp: dù lớp mạng có lọc rồi, server vẫn tự kiểm tra. Server này gọi được Claude bằng subscription của bạn và dùng GPU, lộ ra ngoài là bị dùng chùa.</div></li>
+    <li><label><input type="checkbox"><span class="t">Rate limit theo phiên; giới hạn độ dài audio mỗi lượt (ví dụ 60 giây)</span></label></li>
+  </ul>
+  <h4>B. Trải nghiệm trên điện thoại</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Nút lớn giữ để nói (touch events), tránh cuộn trang khi đang giữ</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Mở khoá audio ở lần chạm đầu tiên (chính sách autoplay của iOS/Android)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Giữ màn hình sáng khi đang nói/đọc (Wake Lock API)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">PWA: manifest + icon, cài lên màn hình chính như một app</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Nén audio (Opus/WebM) thay cho PCM thô khi dùng 4G, server giải nén bằng ffmpeg</span></label></li>
+  </ul>
+  <h4>C. Vận hành</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Server tự chạy khi bật máy (Task Scheduler hoặc Windows service)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Endpoint <code>/health</code> + trang báo khi server tắt ("PC ở nhà đang tắt")</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tuỳ chọn: Wake-on-LAN để bật PC từ xa</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Từ điện thoại dùng 4G (không chung Wi-Fi): hỏi–đáp trọn vòng được</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Truy cập khi chưa đăng nhập → bị từ chối ở cả HTTP lẫn WebSocket</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Độ trễ thả nút → nghe câu đầu chậm hơn dùng tại máy không quá <span class="metric">1.5 giây</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Khởi động lại PC → server tự chạy, không cần thao tác</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Cài được PWA trên điện thoại, mở lên dùng được ngay</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Lộ server ra Internet không có xác thực</td><td>Tailscale trước; không bao giờ port-forward trực tiếp; xác thực ở cả server.</td></tr>
+    <tr><td>Chất lượng micro điện thoại khác tai nghe</td><td>Ghi thêm 20–30 câu bằng điện thoại vào testset, chạy lại benchmark.</td></tr>
+    <tr><td>PC ở nhà tắt / ngủ</td><td>Tắt chế độ sleep khi server chạy; Wake-on-LAN.</td></tr>
+  </table>
+</section>
+
+<!-- ============ RỦI RO ============ -->
+<section id="risks">
+  <h2>Rủi ro tổng thể</h2>
+  <table>
+    <tr><th>Rủi ro</th><th>Mức</th><th>Dấu hiệu sớm</th><th>Phương án</th></tr>
+    <tr><td>STT không đủ tốt với code-switching</td><td>Cao</td><td>Phase 1 term recall &lt; 80%</td><td>Correction + fine-tune LoRA; cho phép sửa transcript trước khi gửi</td></tr>
+    <tr><td>TTS đọc thuật ngữ khó nghe</td><td>Cao</td><td>Phase 3 điểm &lt; 3/5</td><td>Lexicon phiên âm; ép Claude hạn chế viết tắt</td></tr>
+    <tr><td>Thiếu VRAM khi chạy cả hai model</td><td>Trung bình</td><td>Phase 3 &gt; 11GB</td><td>Turbo/int8 cho STT; TTS nhẹ hơn; TTS trên CPU</td></tr>
+    <tr><td>Điều khoản/hạn mức subscription với <code>claude -p</code></td><td>Trung bình</td><td>Bị giới hạn khi dùng thật</td><td>Clipboard bridge; hoặc dùng API cho riêng bridge</td></tr>
+    <tr><td>Câu tiếng Anh hoàn toàn (IELTS/TOEIC) bị STT Việt hoá hoặc TTS đọc giọng Việt</td><td>Cao</td><td>Phase 1 WER nhóm <code>en</code> &gt; 10%</td><td>Chiến lược ngôn ngữ hai lượt; nút chọn chế độ Việt/English; giọng TTS tiếng Anh riêng</td></tr>
+    <tr><td>Lộ server khi dùng từ xa</td><td>Cao</td><td>Có request lạ trong log</td><td>Tailscale, xác thực ở server, không port-forward</td></tr>
+    <tr><td>Dự án kéo dài, mất động lực</td><td>Trung bình</td><td>Một phase kéo dài &gt; 2× ước lượng</td><td>Hạ DoD xuống, đi tiếp tới MVP 4a càng sớm càng tốt</td></tr>
+  </table>
+</section>
+
+<!-- ============ QUY ƯỚC ============ -->
+<section id="rules">
+  <h2>Quy ước làm việc</h2>
+  <ul>
+    <li><b>Một repo</b> cho toàn bộ dự án. Commit code, config, glossary, lexicon, plan. Không commit audio, model weights, log.</li>
+    <li><b>Mỗi phase</b> kết thúc bằng một commit/tag (<code>phase-0</code>, <code>phase-1</code>…) và cập nhật bảng tiến độ trong <code>PLAN.md</code>.</li>
+    <li><b>Thay đổi DoD</b> phải ghi lý do trong báo cáo của phase đó, không âm thầm hạ chuẩn.</li>
+    <li><b>Benchmark lặp lại được</b>: mỗi kết quả gắn với config + commit hash.</li>
+    <li><b>Dữ liệu giọng nói là dữ liệu cá nhân</b>: để ngoài git, sao lưu riêng.</li>
+  </ul>
+  <div class="note">Tiến độ checkbox trong trang này lưu ở <code>localStorage</code> của trình duyệt (theo đường dẫn file). Đổi trình duyệt hoặc xoá dữ liệu trình duyệt thì sẽ mất. Nguồn chính thức vẫn là bảng tiến độ trong <code>PLAN.md</code>.</div>
+</section>
+
+</main>
+</div>
+
+<script>
+(() => {
+  const KEY = 'voice-assistant-plan:v1';
+  const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+  const boxes = [];
+
+  document.querySelectorAll('section').forEach(sec => {
+    sec.querySelectorAll('ul.tasks input[type=checkbox]').forEach((cb, i) => {
+      cb.dataset.id = `${sec.id}:${i}`;
+      cb.checked = !!saved[cb.dataset.id];
+      boxes.push(cb);
+    });
+  });
+
+  function render() {
+    boxes.forEach(cb => cb.closest('li').classList.toggle('checked', cb.checked));
+
+    document.querySelectorAll('section.phase').forEach(sec => {
+      const all = sec.querySelectorAll('ul.tasks input');
+      const done = [...all].filter(c => c.checked).length;
+      const pct = all.length ? Math.round(done / all.length * 100) : 0;
+      sec.querySelector('.pp-label').textContent = `${done} / ${all.length} · ${pct}%`;
+      sec.querySelector('.pp-bar').style.width = pct + '%';
+      const navPct = document.querySelector(`.pct[data-for="${sec.id}"]`);
+      navPct.textContent = pct ? pct + '%' : '';
+      navPct.classList.toggle('done', pct === 100);
+    });
+
+    const done = boxes.filter(c => c.checked).length;
+    document.getElementById('overallBar').style.width = (boxes.length ? done / boxes.length * 100 : 0) + '%';
+    document.getElementById('overallLabel').textContent = `${done} / ${boxes.length} việc`;
+  }
+
+  document.addEventListener('change', e => {
+    if (!e.target.matches('ul.tasks input')) return;
+    saved[e.target.dataset.id] = e.target.checked;
+    localStorage.setItem(KEY, JSON.stringify(saved));
+    render();
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (!confirm('Bỏ tick toàn bộ checkbox?')) return;
+    localStorage.removeItem(KEY);
+    boxes.forEach(cb => cb.checked = false);
+    for (const k in saved) delete saved[k];
+    render();
+  });
+
+  // Đánh dấu mục đang xem trên sidebar
+  const links = [...document.querySelectorAll('nav a')];
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + en.target.id));
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  document.querySelectorAll('main section').forEach(s => obs.observe(s));
+
+  render();
+})();
+</script>
+</body>
+</html>

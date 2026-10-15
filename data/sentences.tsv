@@ -1,0 +1,101 @@
+id	group	split	text	terms
+vi_01	vi	dev	Hôm nay mình ôn lại phần mạng máy tính nhé.
+vi_02	vi	dev	Bạn giải thích lại giúp mình cái ý vừa rồi được không?
+vi_03	vi	holdout	Nói chậm lại một chút cho mình ghi chép với.
+vi_04	vi	dev	Cho mình một ví dụ thực tế dễ hiểu hơn đi.
+vi_05	vi	dev	Phần này mình vẫn chưa hiểu lắm, bạn nói theo cách khác được không?
+vi_06	vi	holdout	Tóm tắt lại ba ý chính của buổi hôm nay giúp mình.
+vi_07	vi	dev	Khi nào thì nên dùng cách này thay vì cách kia?
+vi_08	vi	dev	Cái này chạy lâu dài có tốn tiền nhiều không?
+vi_09	vi	holdout	Mình đang bị lỗi mà không biết bắt đầu tìm từ đâu.
+vi_10	vi	dev	Ưu điểm và nhược điểm của cách làm này là gì?
+vi_11	vi	dev	Kiểu như là nếu dữ liệu lớn lên gấp mười lần thì sao?
+vi_12	vi	holdout	Bạn hỏi mình vài câu để kiểm tra xem mình hiểu chưa.
+vi_13	vi	dev	Câu trả lời của mình vừa rồi có đúng không?
+vi_14	vi	dev	Làm sao để nhớ lâu mấy kiến thức này?
+vi_15	vi	holdout	Mình nên học phần nào trước, phần nào sau?
+vi_16	vi	dev	Thôi chuyển sang chủ đề khác đi.
+vi_17	vi	dev	Cái lúc nãy bạn nói khác gì cái này?
+vi_18	vi	holdout	Giải thích giống như mình là người mới bắt đầu nhé.
+vi_19	vi	dev	Mỗi ngày mình nên dành bao nhiêu thời gian để luyện nghe?
+vi_20	vi	dev	Hôm nay học đến đây thôi, cảm ơn nhé.
+mix_01	mix	dev	Trong AWS cái NAT Gateway này khác Internet Gateway như nào?	AWS;NAT Gateway;Internet Gateway
+mix_02	mix	dev	Trong .NET thì dependency injection scoped với transient khác nhau sao?	.NET;dependency injection;scoped;transient
+mix_03	mix	holdout	Lambda bị cold start thì có cách nào giảm không?	Lambda;cold start
+mix_04	mix	dev	Cognito user pool với identity pool khác nhau chỗ nào?	Cognito;user pool;identity pool
+mix_05	mix	dev	Khi nào thì mình nên dùng CloudFront trước S3?	CloudFront;S3
+mix_06	mix	holdout	Entity Framework mà query chậm thì kiểm tra cái gì trước?	Entity Framework;query
+mix_07	mix	dev	SignalR khác WebSocket thuần ở điểm nào?	SignalR;WebSocket
+mix_08	mix	dev	Giải thích giúp mình security group với network ACL.	security group;network ACL
+mix_09	mix	holdout	Private subnet thì EC2 làm sao ra Internet được?	private subnet;EC2
+mix_10	mix	dev	Mình nên dùng DynamoDB hay RDS cho app này?	DynamoDB;RDS
+mix_11	mix	dev	Docker image với container khác nhau thế nào?	Docker;image;container
+mix_12	mix	holdout	Trong Kubernetes thì pod với deployment là gì?	Kubernetes;pod;deployment
+mix_13	mix	dev	Một CI/CD pipeline nên có những bước nào?	CI/CD;pipeline
+mix_14	mix	dev	REST API với GraphQL thì cái nào hợp hơn cho mobile?	REST API;GraphQL
+mix_15	mix	holdout	Async await trong C# chạy như thế nào bên dưới?	async;await;C#
+mix_16	mix	dev	Middleware trong ASP.NET Core thứ tự chạy ra sao?	middleware;ASP.NET Core
+mix_17	mix	dev	Index trong SQL Server làm query nhanh hơn như thế nào?	index;SQL Server;query
+mix_18	mix	holdout	Microservices với monolith thì team nhỏ nên chọn cái nào?	microservices;monolith
+mix_19	mix	dev	Message queue như SQS dùng để làm gì?	message queue;SQS
+mix_20	mix	dev	IAM role với IAM user khác gì nhau?	IAM role;IAM user
+mix_21	mix	holdout	Load balancer của AWS có mấy loại, ALB với NLB khác nhau sao?	load balancer;AWS;ALB;NLB
+mix_22	mix	dev	Caching bằng Redis thì cache invalidation xử lý thế nào?	Redis;cache invalidation
+mix_23	mix	dev	JWT hết hạn thì refresh token hoạt động ra sao?	JWT;refresh token
+mix_24	mix	holdout	Git rebase với merge thì nên dùng cái nào?	Git;rebase;merge
+mix_25	mix	dev	Unit test với integration test khác nhau như thế nào?	unit test;integration test
+mix_26	mix	dev	Clean Architecture chia layer như thế nào?	Clean Architecture
+mix_27	mix	holdout	Từ mitigate nghĩa là gì, cho mình ví dụ với.	mitigate
+mix_28	mix	dev	Phân biệt affect với effect giúp mình.	affect;effect
+mix_29	mix	dev	Present perfect với past simple khác nhau khi nào?	present perfect;past simple
+mix_30	mix	holdout	IELTS Speaking Part 2 thì nên nói trong bao lâu?	IELTS;Speaking Part 2
+mix_31	mix	dev	Writing Task 2 dạng opinion essay thì mở bài thế nào?	Writing Task 2;opinion essay
+mix_32	mix	dev	Làm sao để tăng band score phần Listening?	band score;Listening
+mix_33	mix	holdout	TOEIC Part 5 hay có bẫy ở những chỗ nào?	TOEIC;Part 5
+mix_34	mix	dev	Collocation với make và do khác nhau ra sao?	collocation;make
+mix_35	mix	dev	Phrasal verb carry out dùng trong ngữ cảnh nào?	phrasal verb;carry out
+mix_36	mix	holdout	Cho mình vài từ đồng nghĩa với important để viết essay.	important;essay
+mix_37	mix	dev	CloudWatch với X-Ray thì dùng để debug cái gì?	CloudWatch;X-Ray;debug
+mix_38	mix	dev	Terraform với CloudFormation nên học cái nào trước?	Terraform;CloudFormation
+mix_39	mix	dev	Rate limiting cho API thì làm ở API Gateway hay trong code?	rate limiting;API Gateway
+mix_40	mix	dev	Event-driven architecture có nhược điểm gì?	event-driven architecture
+dense_01	dense	dev	EC2 trong private subnet đi ra ngoài qua NAT Gateway hay Internet Gateway?	EC2;private subnet;NAT Gateway;Internet Gateway
+dense_02	dense	dev	API Gateway gọi Lambda rồi Lambda ghi vào DynamoDB thì cần IAM role gì?	API Gateway;Lambda;DynamoDB;IAM role
+dense_03	dense	holdout	ASP.NET Core dùng EF Core với PostgreSQL thì migration chạy lúc nào?	ASP.NET Core;EF Core;PostgreSQL;migration
+dense_04	dense	dev	S3 bucket policy với IAM policy với ACL thì cái nào được ưu tiên?	S3;bucket policy;IAM policy;ACL
+dense_05	dense	dev	VPC peering với Transit Gateway với PrivateLink khác nhau sao?	VPC peering;Transit Gateway;PrivateLink
+dense_06	dense	holdout	ECS Fargate với EKS với App Runner thì API nhỏ nên chọn cái nào?	ECS;Fargate;EKS;App Runner
+dense_07	dense	dev	SQS, SNS với EventBridge dùng trong trường hợp nào?	SQS;SNS;EventBridge
+dense_08	dense	dev	Route 53 trỏ domain về CloudFront có HTTPS bằng ACM được không?	Route 53;CloudFront;HTTPS;ACM
+dense_09	dense	holdout	Scoped service inject vào singleton thì bị lỗi captive dependency đúng không?	scoped;singleton;captive dependency
+dense_10	dense	dev	IQueryable với IEnumerable trong LINQ khác gì khi query database?	IQueryable;IEnumerable;LINQ;query
+dense_11	dense	dev	Docker Compose chạy Redis, PostgreSQL với RabbitMQ chung một network.	Docker Compose;Redis;PostgreSQL;RabbitMQ
+dense_12	dense	holdout	GitHub Actions build Docker image rồi push lên ECR rồi deploy lên ECS.	GitHub Actions;Docker;ECR;ECS
+dense_13	dense	dev	CORS bị lỗi preflight OPTIONS trả về 403 thì sửa ở đâu?	CORS;preflight;OPTIONS;403
+dense_14	dense	dev	OAuth2 authorization code với PKCE khác client credentials thế nào?	OAuth2;authorization code;PKCE;client credentials
+dense_15	dense	holdout	RDS Multi-AZ với read replica khác nhau ở failover hay scaling?	RDS;Multi-AZ;read replica;failover
+dense_16	dense	dev	CQRS với Event Sourcing có bắt buộc đi chung với nhau không?	CQRS;Event Sourcing
+dense_17	dense	dev	HttpClient nên dùng IHttpClientFactory để tránh socket exhaustion đúng không?	HttpClient;IHttpClientFactory;socket exhaustion
+dense_18	dense	holdout	CloudFront cache theo query string với header thì TTL tính sao?	CloudFront;query string;header;TTL
+dense_19	dense	dev	Auto Scaling Group nên scale theo CPU hay theo số request của ALB?	Auto Scaling Group;CPU;ALB
+dense_20	dense	dev	TOEIC Listening Part 3 với Part 4 nên đọc câu hỏi trước hay nghe trước?	TOEIC;Listening;Part 3;Part 4
+en_01	en	dev	Could you explain the difference between a NAT Gateway and an Internet Gateway?	NAT Gateway;Internet Gateway
+en_02	en	dev	What does the word resilient mean in a technical context?	resilient
+en_03	en	holdout	Can you check my pronunciation of the word architecture?	pronunciation;architecture
+en_04	en	dev	I'd like to practice IELTS Speaking Part 1 with you.	IELTS;Speaking Part 1
+en_05	en	dev	Describe a piece of technology that you find useful.	technology
+en_06	en	holdout	In my opinion, remote work has more advantages than disadvantages.	remote work;advantages;disadvantages
+en_07	en	dev	Is it correct to say I have been working here since three years?	since
+en_08	en	dev	Give me some useful phrases to start an IELTS Writing Task 1 report.	IELTS;Writing Task 1
+en_09	en	holdout	How do I use nevertheless and however in formal writing?	nevertheless;however
+en_10	en	dev	What's a natural way to say that a deployment failed in a meeting?	deployment;meeting
+en_11	en	dev	I usually deploy my applications on AWS using containers.	deploy;AWS;containers
+en_12	en	holdout	Please ask me three questions about my hometown.	hometown
+en_13	en	dev	Could you correct the grammar in my last answer?	grammar
+en_14	en	dev	What is the past participle of arise?	past participle;arise
+en_15	en	holdout	The chart illustrates the number of users between 2015 and 2025.	chart;illustrates
+en_16	en	dev	Let me try to answer that question again, more slowly this time.
+en_17	en	dev	How would you explain dependency injection to a junior developer?	dependency injection;junior developer
+en_18	en	holdout	Which one is more formal, get or obtain?	formal;obtain
+en_19	en	dev	I'm preparing for the TOEIC exam next month.	TOEIC
+en_20	en	dev	What are some common collocations with the word decision?	collocations;decision

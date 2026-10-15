@@ -1,0 +1,150 @@
+# Glossary thuật ngữ cho STT
+#
+# Định dạng mỗi dòng:   [*]Thuật ngữ chuẩn | alias 1 | alias 2 ...
+#   *      = thuật ngữ ưu tiên, dùng cho initial_prompt của Whisper (giữ khoảng 30 cái)
+#   alias  = cách STT hay viết sai, điền dần trong Phase 1 dựa trên lỗi thật
+# Dòng bắt đầu bằng # là chú thích.
+
+# ---------- AWS ----------
+*AWS
+*EC2
+*S3
+*VPC
+*NAT Gateway
+*Internet Gateway
+*Lambda
+*Cognito
+*CloudFront
+*DynamoDB
+*RDS
+*IAM role
+IAM user
+IAM policy
+*API Gateway
+*SQS
+SNS
+EventBridge
+*ECS
+EKS
+ECR
+Fargate
+App Runner
+Route 53
+ACM
+CloudWatch
+X-Ray
+CloudFormation
+Terraform
+*private subnet
+public subnet
+security group
+network ACL
+VPC peering
+Transit Gateway
+PrivateLink
+ALB
+NLB
+load balancer
+Auto Scaling Group
+Multi-AZ
+read replica
+failover
+bucket policy
+user pool
+identity pool
+cold start
+
+# ---------- .NET / C# ----------
+*.NET
+*C#
+*ASP.NET Core
+*Entity Framework
+EF Core
+*dependency injection
+*scoped
+*transient
+*singleton
+captive dependency
+*SignalR
+middleware
+async
+await
+LINQ
+IQueryable
+IEnumerable
+HttpClient
+IHttpClientFactory
+socket exhaustion
+migration
+
+# ---------- Dev chung ----------
+Docker
+Docker Compose
+container
+image
+*Kubernetes
+pod
+deployment
+CI/CD
+pipeline
+GitHub Actions
+Git
+rebase
+merge
+*REST API
+GraphQL
+WebSocket
+JWT
+refresh token
+OAuth2
+PKCE
+authorization code
+client credentials
+CORS
+preflight
+*Redis
+cache invalidation
+PostgreSQL
+SQL Server
+RabbitMQ
+index
+query
+database
+microservices
+monolith
+message queue
+*Clean Architecture
+CQRS
+Event Sourcing
+event-driven architecture
+rate limiting
+unit test
+integration test
+TTL
+HTTPS
+debug
+
+# ---------- Tiếng Anh: thi cử ----------
+*IELTS
+*TOEIC
+Speaking Part 1
+*Speaking Part 2
+Writing Task 1
+*Writing Task 2
+Listening
+Reading
+band score
+opinion essay
+essay
+
+# ---------- Tiếng Anh: ngữ pháp & từ vựng ----------
+*present perfect
+past simple
+past participle
+*collocation
+*phrasal verb
+grammar
+pronunciation
+synonym
+formal
+informal
