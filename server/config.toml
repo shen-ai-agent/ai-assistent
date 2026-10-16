@@ -22,6 +22,8 @@ voice = "maichi"          # baotrang giahuy hamy huuduc kimoanh maichi quangminh
 device = "cuda"           # cần onnxruntime-gpu 1.23.2 (xem README); "cpu" thì RTF ~1, dễ khựng
 threads = 4
 loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
+first_chunk_frames = 2    # mẩu 160ms từ đầu: không giật ở bench không STT (_local/tts_chunk)
+max_chunk_frames = 2
 
 [bridge]
 # claude_cli: gọi `claude -p` (Claude Code, dùng gói subscription đã đăng nhập), giữ ngữ cảnh bằng --resume
@@ -37,6 +39,21 @@ model = ""                # rỗng = mặc định của Claude Code; đổi đ�
 models = ["sonnet", "opus", "haiku"]   # alias của claude --model, hiện trong ô chọn trên web
 timeout_s = 120
 log_dir = "_local/sessions"
+
+[assistant]
+# Chế độ rảnh tay (T-010): bật bằng nút mic trên tab Mimi. Gọi tên ở đầu câu ("Mimi ơi", "hey Mimi")
+name = "Mimi"
+aliases = ["mi mi"]       # cách Whisper hay viết sai tên (đã tự bỏ dấu, gộp chữ lặp, y = i)
+acks = ["Có mình đây.", "Dạ?", "Mình nghe nè.", "Bạn cần gì nè?", "Ơi, mình đây."]   # đừng chứa tên: loa dội vào mic sẽ tự đánh thức
+wake_min_score = 0.8
+wake_prompt = "Hey Mimi. Mimi ơi."   # wake_bench 16/10: recall 94% (không prompt 88%), nhận nhầm như nhau 2%; đổi tên thì sửa cả dòng này
+wake_window_s = 3.0
+min_rest_words = 2        # "Mimi ơi, EC2 là gì" nói liền: hỏi luôn
+ack_grace_ms = 300        # chỉ gọi tên: chờ thêm chừng này trước khi đáp, nói tiếp thì coi là câu hỏi
+sleep_silence_ms = 500
+active_silence_ms = 900
+active_timeout_s = 8
+follow_up_s = 6           # 0 = lần nào cũng phải gọi tên
 
 [log]
 dir = "_local/logs"

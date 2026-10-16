@@ -10,6 +10,11 @@ data/testset/transcripts.jsonl. Chạy lại thì bỏ qua các câu đã ghi.
     python bench/record.py --redo mix_07      # ghi lại một câu
     python bench/record.py --test-mic         # kiểm tra mức thu trước khi ghi
     python bench/record.py --restart          # cất bộ đã ghi vào _local/ rồi ghi lại từ đầu
+
+Bộ test gọi tên trợ lý (T-010), đo bằng bench/wake_bench.py:
+
+    python bench/record.py --sentences data/wake_phrases.tsv --out data/wake_testset
+    python bench/record.py --ambient 10       # ghi 10 phút âm nền (không gọi tên) vào _local/wake_ambient/
 """
 
 from __future__ import annotations
@@ -90,6 +95,35 @@ def check_audio(audio: np.ndarray) -> tuple[bool, str]:
     if db < QUIET_DB:
         return False, info + "  ⚠ quá nhỏ — kiểm tra micro"
     return True, info
+
+
+def record_ambient(device: int | None, rate: int, minutes: float) -> None:
+    """Ghi liền một đoạn dài: nói chuyện, gõ phím, xem video... nhưng không gọi tên trợ lý."""
+    out = ROOT / "_local" / "wake_ambient"
+    out.mkdir(parents=True, exist_ok=True)
+    q: queue.Queue[np.ndarray] = queue.Queue()
+    chunks: list[np.ndarray] = []
+    total = minutes * 60
+    print(f"\nGhi {minutes:g} phút âm nền. Sinh hoạt bình thường, KHÔNG gọi tên trợ lý. q: dừng sớm")
+    with sd.InputStream(samplerate=rate, channels=1, dtype="float32", device=device,
+                        callback=lambda indata, *a: q.put(indata[:, 0].copy())):
+        start = time.time()
+        while time.time() - start < total:
+            while not q.empty():
+                chunks.append(q.get())
+            print(f"\r  🔴 {(time.time() - start) / 60:5.1f}/{minutes:g} phút ", end="", flush=True)
+            if msvcrt.kbhit() and getkey() == "q":
+                break
+            time.sleep(0.2)
+    while not q.empty():
+        chunks.append(q.get())
+    print()
+    audio = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+    if rate != SAMPLE_RATE and audio.size:
+        audio = soxr.resample(audio, rate, SAMPLE_RATE).astype(np.float32)
+    path = out / f"ambient_{datetime.now():%Y%m%d_%H%M%S}.wav"
+    sf.write(path, audio, SAMPLE_RATE, subtype="PCM_16")
+    print(f"✓ {len(audio) / SAMPLE_RATE / 60:.1f} phút → {path.relative_to(ROOT)}")
 
 
 def restart_testset() -> None:
@@ -197,7 +231,17 @@ def main() -> None:
     ap.add_argument("--redo", nargs="+", metavar="ID", help="ghi lại các câu này")
     ap.add_argument("--test-mic", action="store_true", help="ghi thử để chỉnh mức thu, không lưu")
     ap.add_argument("--restart", action="store_true", help="cất bộ đã ghi vào _local/ rồi ghi lại từ đầu")
+    ap.add_argument("--sentences", type=Path, help="file câu khác (cùng cột với data/sentences.tsv)")
+    ap.add_argument("--out", type=Path, help="thư mục lưu bộ test khác (vd data/wake_testset)")
+    ap.add_argument("--ambient", type=float, metavar="PHÚT", help="ghi âm nền liên tục vào _local/wake_ambient/")
     args = ap.parse_args()
+
+    global SENTENCES, OUT_DIR, MANIFEST
+    if args.sentences:
+        SENTENCES = args.sentences.resolve()
+    if args.out:
+        OUT_DIR = args.out.resolve()
+        MANIFEST = OUT_DIR / "transcripts.jsonl"
 
     if args.list_devices:
         print(sd.query_devices())
@@ -218,6 +262,9 @@ def main() -> None:
 
     if args.test_mic:
         test_mic(args.device, rate)
+        return
+    if args.ambient:
+        record_ambient(args.device, rate, args.ambient)
         return
     if args.restart:
         restart_testset()

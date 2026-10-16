@@ -12,12 +12,15 @@ Client → Server
   {"type": "ask_stop"}                          dừng hỏi và dừng đọc câu trả lời
   {"type": "new_session"}                       Claude quên ngữ cảnh cũ
   {"type": "set_model", "model": "sonnet"}      đổi model cho các lượt sau ("" = mặc định), áp cho mọi tab
+  {"type": "listen", "on": bool, "topic": "AWS" | null}   bật/tắt rảnh tay (gửi lại để đổi chủ đề).
+                                                Khi bật, client gửi frame PCM liên tục; giữ Space vẫn dùng được
 
 Server → Client
   {"type": "hello", "topics": [...], "model": "...", "sample_rate": 16000,
    "tts": {"sample_rate": 48000, "voice": "..."} | null,          null = server tắt TTS
    "bridge": {"kind": "claude_cli" | "clipboard", "auto_ask": bool, "session_id",
-              "model": str | null, "models": [...]} | null}     model null = bridge không chọn được model
+              "model": str | null, "models": [...]} | null,     model null = bridge không chọn được model
+   "assistant": {"name": "Mimi", "sleep_silence_ms", "active_silence_ms"}}   im lặng server chờ để hết đoạn
   {"type": "state", "value": "IDLE" | "LISTENING" | "TRANSCRIBING" | "WAITING_CLAUDE"}
   {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms", "stt_ms"}
   {"type": "error", "code": "...", "message": "..."}
@@ -33,6 +36,16 @@ Server → Client
    "first_text_ms", "total_ms", "cost_usd", "model"}            model: tên model thật đã trả lời
   {"type": "bridge_session", "session_id": str | null}           sau new_session
   {"type": "bridge_model", "model": str}                         sau set_model, gửi tới mọi tab
+  {"type": "command", "name": "new_session" | "stop" | "repeat", "text", "reply": str | null}
+        câu hỏi ngắn là lệnh (server/assistant/commands.py): chạy ngay, không hỏi Claude; reply được đọc
+
+  Rảnh tay (T-010):
+  {"type": "listen", "mode": "OFF" | "SLEEP" | "ACTIVE" | "BUSY"}
+        SLEEP chờ gọi tên; ACTIVE đoạn nói kế tiếp là câu hỏi; BUSY đang nghĩ/đọc, chỉ nghe tên để ngắt lời
+  {"type": "vad", "speaking": bool}                              VAD thấy bắt đầu / hết tiếng nói
+  {"type": "heard", "text", "wake": bool, "action": "ack" | "ask" | "ignore", "ack": str | null, "stt_ms"}
+        một đoạn nói đã nhận dạng để tìm tên. ack = câu đáp sẽ đọc; ask = có câu hỏi ngay sau tên.
+        Câu hỏi (sau ack hoặc ask) đến bằng transcript như push-to-talk.
 
 speak_id tăng dần trong một kết nối; client bỏ audio có speak_id cũ (đến trễ sau khi bấm dừng).
 Câu trả lời của Claude đến dần nên câu được gửi dần bằng speak_more; speak_end sau câu cuối.
@@ -52,6 +65,13 @@ class State(StrEnum):
     WAITING_CLAUDE = "WAITING_CLAUDE"
 
 
+class ListenMode(StrEnum):
+    OFF = "OFF"
+    SLEEP = "SLEEP"
+    ACTIVE = "ACTIVE"
+    BUSY = "BUSY"
+
+
 class ErrorCode(StrEnum):
     BAD_MESSAGE = "bad_message"
     BAD_TOPIC = "bad_topic"
@@ -64,9 +84,10 @@ class ErrorCode(StrEnum):
     BRIDGE_FAILED = "bridge_failed"
 
 
-def hello(topics: list[str], model: str, tts: dict | None = None, bridge: dict | None = None) -> dict:
+def hello(topics: list[str], model: str, tts: dict | None = None, bridge: dict | None = None,
+          assistant: dict | None = None) -> dict:
     return {"type": "hello", "topics": topics, "model": model, "sample_rate": SAMPLE_RATE, "tts": tts,
-            "bridge": bridge}
+            "bridge": bridge, "assistant": assistant}
 
 
 def state(value: State) -> dict:
@@ -120,9 +141,25 @@ def answer_end(ask_id: int, cancelled: bool, error: str | None, session_id: str 
             "model": model}
 
 
+def command(name: str, text: str, reply: str | None) -> dict:
+    return {"type": "command", "name": str(name), "text": text, "reply": reply}
+
+
 def bridge_session(session_id: str | None) -> dict:
     return {"type": "bridge_session", "session_id": session_id}
 
 
 def bridge_model(model: str) -> dict:
     return {"type": "bridge_model", "model": model}
+
+
+def listen(mode: ListenMode) -> dict:
+    return {"type": "listen", "mode": str(mode)}
+
+
+def vad(speaking: bool) -> dict:
+    return {"type": "vad", "speaking": speaking}
+
+
+def heard(text: str, wake: bool, action: str, ack: str | None, stt_ms: int) -> dict:
+    return {"type": "heard", "text": text, "wake": wake, "action": action, "ack": ack, "stt_ms": stt_ms}

@@ -211,7 +211,10 @@ AI-assistent/
 
 ### TODO (chọn theo feedback)
 - [ ] **Ngắt lời (barge-in):** bấm 🎤 khi đang SPEAKING → dừng đọc ngay, bắt đầu nghe
-- [ ] **VAD (Silero)** cho chế độ rảnh tay: tự phát hiện bắt đầu/kết thúc câu
+- [x] **Trợ lý rảnh tay (T-010):** mic luôn nghe (VAD Silero streaming), gọi tên "Mimi ơi" / "hey Mimi" thì đáp, ngừng nói thì trả lời; tab Mimi + tab Chi tiết. Bước A (Whisper tìm tên) xong; bước B (openWakeWord) chỉ làm nếu A không đạt DoD
+- [x] Ghi bộ test gọi tên (`data/wake_phrases.tsv`, 48 câu)
+- [ ] Ghi ≥30 phút âm nền, đo bằng `bench/wake_bench.py`
+- [x] Lệnh giọng nói (`server/assistant/commands.py`): "mở session mới", "dừng lại", "đọc lại" chạy ngay trên server, không hỏi Claude. Chỉ câu ngắn mới là lệnh
 - [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
 - [ ] **Fine-tune STT** (chỉ khi Phase 1 kết luận cần): LoRA trên whisper với dữ liệu giọng mình + thuật ngữ
@@ -222,7 +225,8 @@ AI-assistent/
 - [ ] Mỗi mục được làm có số liệu trước/sau (term recall, độ trễ, hoặc điểm cảm nhận)
 - [ ] Term recall trên testset mở rộng ≥ **95%**
 - [ ] Ngắt lời: từ lúc bấm đến khi dừng đọc ≤ **200ms**
-- [ ] VAD (nếu làm): trong 20 lượt nói tự nhiên, ≤ 1 lần cắt giữa câu, ≤ 1 lần kích hoạt nhầm
+- [ ] Rảnh tay (`wake_bench.py`): gọi tên nhận đúng ≥ **95%**; nhận nhầm 0 trên câu gần giống + testset, ≤ **1 lần/giờ** âm nền; câu hỏi bị cắt giữa chừng ≤ **1/20**; ngừng gọi tên → nghe câu đáp ≤ **1.5s**
+- [ ] Ngắt lời bằng giọng (gọi tên lúc đang đọc) ≤ **1.5s**; mục 200ms ở trên tính cho nút/phím
 - [ ] Khởi động toàn bộ hệ thống bằng 1 lệnh
 
 ---
@@ -279,6 +283,6 @@ AI-assistent/
 | 2 | Voice server + Web (STT) | 🟡 TODO xong; DoD trên trình duyệt chưa thực hiện: nói 10 câu, tự kết nối lại, chạy 1 giờ (T-002) |
 | 3 | TTS | ✅ 16/10/2026 — ZeroTTS GPU, giọng maichi, tiếng đầu ~80ms, VRAM 5.9GB (T-008) |
 | 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
-| 5 | Hoàn thiện trải nghiệm | ⬜ |
+| 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền |
 | 6 | Giọng của chính mình | ⬜ |
 | 7 | Dùng từ mọi thiết bị | ⬜ |

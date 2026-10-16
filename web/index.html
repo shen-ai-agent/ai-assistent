@@ -9,6 +9,10 @@
 <body>
 <header>
   <h1>Voice Study Assistant</h1>
+  <nav class="tabs">
+    <a href="#mimi" data-tab="mimi">Mimi</a>
+    <a href="#detail" data-tab="detail">Chi tiết</a>
+  </nav>
   <div class="status">
     <a href="learn.html" class="nav">Đề xuất học <span id="learn-count" class="badge" hidden></span></a>
     <span id="conn" class="dot" title="Kết nối server"></span>
@@ -16,7 +20,28 @@
   </div>
 </header>
 
-<main>
+<main id="tab-mimi" class="tab assistant">
+  <div class="stage">
+    <div id="orb" class="orb off" title="Trạng thái trợ lý"><div class="glow"></div><div class="core"></div></div>
+    <p id="orb-status" class="orb-status">…</p>
+    <p id="caption" class="caption"></p>
+    <div id="reply" class="reply" hidden>
+      <div class="reply-text"></div>
+      <pre class="reply-code" hidden></pre>
+    </div>
+  </div>
+  <div class="dock">
+    <button id="hf-toggle" class="pill" disabled title="Mic luôn nghe, gọi tên để hỏi">🎙 Rảnh tay</button>
+    <button id="mimi-stop" class="pill secondary" disabled title="Dừng nghĩ / dừng đọc (Esc)">⏹ Dừng</button>
+  </div>
+  <p class="hint center">Bật <b>Rảnh tay</b> rồi gọi "<span class="wake-name">Mimi</span> ơi", "hey <span class="wake-name">Mimi</span>"…
+    Đọc xong vẫn hỏi tiếp được vài giây mà không cần gọi tên. Giữ <kbd>Space</kbd> để nói như cũ, <kbd>Esc</kbd> để dừng.</p>
+  <p id="echo-hint" class="hint center warn" hidden>Đang dùng loa ngoài thì bật <b>Khử vọng</b> ở tab Chi tiết
+    (hoặc dùng tai nghe), để mic không thu lại tiếng Mimi.</p>
+  <p id="mimi-error" class="error center" hidden></p>
+</main>
+
+<main id="tab-detail" class="tab" hidden>
   <section class="controls">
     <label>Micro
       <select id="mic"><option value="">Mặc định của hệ thống</option></select>
@@ -56,6 +81,13 @@
       <span id="speak-status" class="hint"></span>
     </div>
     <ol id="speak-sentences"></ol>
+  </section>
+
+  <section>
+    <h2>Rảnh tay: các đoạn đã nghe</h2>
+    <p class="hint">Mỗi đoạn nói lúc chờ gọi tên, server nhận dạng không prompt rồi tìm tên ở đầu câu
+      (log: <code>_local/logs/wake-*.jsonl</code>). Thời gian tính từ lúc bạn ngừng nói.</p>
+    <ol id="heard-log" reversed></ol>
   </section>
 
   <section>

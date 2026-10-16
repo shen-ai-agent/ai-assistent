@@ -26,6 +26,8 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 .venv/Scripts/python bench/tts_bench.py --model zerotts --gpu --voice maichi  # benchmark TTS (35 đoạn mẫu)
 .venv/Scripts/python bench/tts_bench.py --compare             # bảng so sánh các run TTS
 .venv/Scripts/python bench/tts_ws_client.py                   # đo DoD TTS qua /ws, server phải đang chạy
+.venv/Scripts/python bench/record.py --sentences data/wake_phrases.tsv --out data/wake_testset  # bộ gọi tên (người dùng ghi)
+.venv/Scripts/python bench/wake_bench.py [--name X --min-score 0.75] / --compare  # đo nhận tên, tắt server trước
 .venv/Scripts/python bench/claude_ws_client.py                # đo DoD Phase 4 (hỏi Claude thật, tốn hạn mức), server phải đang chạy
 ```
 
@@ -53,18 +55,20 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
   - `normalize.py`: text viết → text đọc. `clean_structure` (cắt sau `---CODE---`, code, markdown, URL) → `split_sentences` → `speakable` từng câu (lexicon `data/lexicon.tsv`, số, đơn vị, viết tắt). `prepare` trả `Segment(text, lang, source)`.
   - `splitter.py`: tách câu, không tách ở số thập phân, viết tắt, tên file.
   - `synth.py`: `ZeroTtsEngine` (ONNX GPU, `synthesize_stream`, 48kHz), `TtsService` (tự đọc lại lexicon).
-- `server/`: voice server FastAPI (Phase 2). `protocol.py` là nguồn duy nhất định nghĩa message WebSocket; sửa protocol thì sửa cả `web/app.js`. `app.py` có `create_app(cfg, engine_factory, tts_factory, bridge_factory)` để test thay engine giả (`tests/test_server.py`); `Config.tts_enabled` mặc định tắt, `Config.bridge_kind` mặc định `"none"`; `server/config.toml` bật cả hai. STT và TTS mỗi bên một khoá GPU riêng. `turnlog.py` ghi log lượt nói và bản sửa tay.
+- `server/`: voice server FastAPI (Phase 2). `protocol.py` là nguồn duy nhất định nghĩa message WebSocket; sửa protocol thì sửa cả `web/app.js`. `app.py` có `create_app(cfg, engine_factory, tts_factory, bridge_factory, vad_factory)` để test thay engine giả (`tests/test_server.py`); `Config.tts_enabled` mặc định tắt, `Config.bridge_kind` mặc định `"none"`; `server/config.toml` bật cả hai. STT và TTS mỗi bên một khoá GPU riêng. `turnlog.py` ghi log lượt nói và bản sửa tay.
   - `learning.py`: vòng tự học (T-007): đề xuất thuật ngữ/rule từ bản sửa tay, kiểm tra, áp dụng vào `data/`. `learn_api.py` là REST `/api/learn` cho `web/learn.html`.
   - Lượt nói chia dev/holdout cố định bằng `split_of(turn_id)`; chỉ lượt dev sinh đề xuất, giống quy tắc đo đạc bên dưới.
   - `bridge/`: hỏi Claude (Phase 4, T-009). `base.py` là interface `Bridge.ask() -> TextDelta | Done`, huỷ bằng cách huỷ task / đóng generator. `claude_cli.py` gọi `claude -p --output-format stream-json`, `clipboard.py` (Win32 clipboard + hotkey qua ctypes), `feeder.py` cắt câu từ stream cho TTS, `asklog.py` ghi `_local/sessions`. Test dùng `FakeBridge` qua `bridge_factory` hoặc script `claude` giả (`tests/test_bridge.py`), không gọi Claude thật.
   - `claude_cli` chạy trong `_local/claude-workdir` (nằm trong repo) nên phải tắt CLAUDE.md/git/memory qua `--settings`. Không dùng `--bare`: chế độ đó chỉ nhận API key, không dùng được subscription.
+  - `assistant/`: rảnh tay (T-010). `vad.py`: `StreamingVad` (Silero v6 của faster-whisper, giữ trạng thái giữa frame), `Segmenter` (cắt đoạn, mốc thời gian tính bằng số mẫu mic). `wake.py`: `WakeMatcher` (tên ở đầu câu, so gần đúng sau `fold`), `decide()` dùng chung cho server và `bench/wake_bench.py`. `commands.py`: lệnh giọng nói (`match_command`), `App.start_ask` chạy lệnh thay vì hỏi Claude, báo web bằng message `command`.
+  - `handsfree.py`: `HandsFree` một phiên, SLEEP/ACTIVE/BUSY. Mọi mốc thời gian theo `seg.pos` (mẫu mic), không theo đồng hồ, nên test chỉ cần đẩy PCM (`tests/test_assistant.py`, VAD giả qua `vad_factory`). Test phải đẩy đủ im lặng sau `speak_end` thì cửa sổ ACTIVE mới mở. Tên trợ lý không đưa vào `initial_prompt`; câu đáp không chứa tên.
   - Test phải trỏ `Config(glossary=..., corrections=...)` và `L.TESTSET`/`L.BASELINE_RUN` vào `tmp_path` để không ghi vào `data/` thật (`tests/test_learning.py`).
 - `web/`: HTML/JS thuần, không có bước build. `capture-worklet.js` resample mic về PCM 16kHz, frame 100ms.
-- `bench/`: `record.py` (ghi bộ test), `stt_bench.py`, `stt_configs.toml` (mỗi bảng TOML là một cấu hình), `ws_client.py` (chấm server qua WebSocket), `build_personal_set.py`, `suggest_corrections.py`, `tts_bench.py` + `tts_samples.txt` (35 đoạn clean/term/dirty/en), `tts_ws_client.py`, `claude_ws_client.py`.
+- `bench/`: `record.py` (ghi bộ test), `stt_bench.py`, `stt_configs.toml` (mỗi bảng TOML là một cấu hình), `ws_client.py` (chấm server qua WebSocket), `build_personal_set.py`, `suggest_corrections.py`, `tts_bench.py` + `tts_samples.txt` (35 đoạn clean/term/dirty/en), `tts_ws_client.py`, `claude_ws_client.py`, `wake_bench.py` (+ `data/wake_phrases.tsv`: nhóm `name`/`ask`/`near`; `record.py --ambient` ghi âm nền vào `_local/wake_ambient/`).
 - `prompts/voice_reply.md`: instruction văn nói cho Claude, khớp với marker `---CODE---` của normalize.
 - `data/glossary.txt`: dòng `[*]Thuật ngữ | alias...`, chia chủ đề bằng `# ---------- Tên ----------`. `*` = ưu tiên, đưa vào prompt mặc định.
 - `data/sentences.tsv`: 100 câu test (`id, group, split, text, terms`). Nhóm `vi`, `mix`, `dense`, `en`; split `dev` / `holdout`.
-- Không commit: `data/testset/` (audio ghi âm), `models/`, `_local/` (kết quả benchmark, báo cáo, file nháp).
+- Không commit: `data/testset/`, `data/wake_testset/` (audio ghi âm), `models/`, `_local/` (kết quả benchmark, báo cáo, file nháp).
 
 ## Quy tắc đo đạc
 

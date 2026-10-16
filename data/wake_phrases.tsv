@@ -1,0 +1,49 @@
+id	group	split	text	terms
+name_01	name	dev	Mimi ơi.
+name_02	name	dev	Hey Mimi.
+name_03	name	holdout	Ê Mimi.
+name_04	name	dev	Mimi.
+name_05	name	dev	Mimi ơi, nghe không?
+name_06	name	holdout	Này Mimi.
+name_07	name	dev	Alo Mimi.
+name_08	name	dev	Hi Mimi.
+name_09	name	holdout	Mimi à.
+name_10	name	dev	Ơi Mimi ơi.
+name_11	name	dev	Mimi ơi mimi.
+name_12	name	holdout	Hey Mimi, bạn đâu rồi?
+name_13	name	dev	Ok Mimi.
+name_14	name	dev	Mimi nè.
+name_15	name	holdout	Ê Mimi ơi.
+name_16	name	dev	Hello Mimi.
+ask_01	ask	dev	Mimi ơi, EC2 là gì?	EC2
+ask_02	ask	dev	Hey Mimi, giải thích giúp mình S3 với.	S3
+ask_03	ask	holdout	Ê Mimi, dependency injection trong .NET hoạt động thế nào?	dependency injection;.NET
+ask_04	ask	dev	Mimi ơi, cho mình một câu luyện IELTS speaking part 2.	IELTS;speaking
+ask_05	ask	dev	Mimi, hôm nay mình học tới đâu rồi?
+ask_06	ask	holdout	Này Mimi, Lambda khác gì EC2?	Lambda;EC2
+ask_07	ask	dev	Hey Mimi, what is the difference between a VPC and a subnet?	VPC;subnet
+ask_08	ask	dev	Mimi ơi, đọc lại câu vừa rồi chậm hơn được không?
+ask_09	ask	holdout	Mimi, async await trong C# là gì?	async;await;C#
+ask_10	ask	dev	Ê Mimi, cho mình năm từ vựng TOEIC về hợp đồng.	TOEIC
+ask_11	ask	dev	Mimi ơi, IAM role với IAM user khác nhau chỗ nào?	IAM
+ask_12	ask	holdout	Hey Mimi, can you quiz me on Entity Framework?	Entity Framework
+ask_13	ask	dev	Mimi, tóm tắt lại giúp mình phần vừa học.
+ask_14	ask	dev	Mimi ơi, CloudFront dùng để làm gì?	CloudFront
+ask_15	ask	holdout	Alo Mimi, giải thích LINQ đơn giản thôi.	LINQ
+ask_16	ask	dev	Hey Mimi, how do I say this sentence more naturally?
+near_01	near	dev	Mì này ngon quá.
+near_02	near	dev	Hôm qua mình mua mì gói.
+near_03	near	holdout	Hãy nhìn đi.
+near_04	near	dev	Mi mi mi mi, luyện giọng chút.
+near_05	near	dev	Em nhớ mang theo áo mưa nhé.
+near_06	near	holdout	Hồi trước mình hay gọi con mèo là Mimi.
+near_07	near	dev	Bạn có thấy cái điện thoại của mình không?
+near_08	near	dev	Mini project này làm trong một tuần.
+near_09	near	holdout	Ừ, mai mình học tiếp.
+near_10	near	dev	Mimosa là một loài hoa.
+near_11	near	dev	Hey, mình nói chuyện với bạn sau nhé.
+near_12	near	holdout	Minh ơi, ra ăn cơm.
+near_13	near	dev	Ê, mai mấy giờ họp?
+near_14	near	dev	Mỹ Mỹ ơi, xuống nhà đi.
+near_15	near	holdout	Okay, let me see.
+near_16	near	dev	Mi ơi, đưa mình cái sạc.

@@ -10,6 +10,7 @@ web/dist/
 
 # Dữ liệu nặng / cá nhân — không commit
 data/testset/
+data/wake_testset/
 models/
 voice/**/*.wav
 voice/**/*.flac

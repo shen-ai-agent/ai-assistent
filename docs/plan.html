@@ -868,6 +868,8 @@ Server → Client
     <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
   </div>
 
+  <div class="box"><p><b>Trạng thái (16/10/2026):</b> rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền.</p></div>
+
   <div class="goal">Sửa những gì việc <b>dùng thật</b> chỉ ra. Ưu tiên theo <code>feedback.md</code>, <b>không cần làm hết</b> danh sách dưới đây.</div>
 
   <div class="note">Cách chọn việc: với mỗi mục trong <code>feedback.md</code>, ghi (1) bao nhiêu lần gặp mỗi buổi, (2) khó chịu cỡ nào 1–3. Làm theo thứ tự tích hai số từ cao xuống thấp.</div>
@@ -876,10 +878,14 @@ Server → Client
   <h4>Tương tác</h4>
   <ul class="tasks">
     <li><label><input type="checkbox"><span class="t"><b>Ngắt lời</b>: bấm 🎤 khi đang <code>SPEAKING</code> → dừng đọc, huỷ Claude đang chạy, chuyển sang <code>LISTENING</code></span></label></li>
-    <li><label><input type="checkbox"><span class="t"><b>VAD (Silero)</b> cho chế độ rảnh tay: tự phát hiện bắt đầu/kết thúc câu</span></label>
-      <div class="hint">Tham số cần chỉnh: ngưỡng xác suất, thời gian im lặng để kết thúc (~700ms), độ dài tối thiểu. Khi đang SPEAKING thì phải tắt VAD hoặc dùng tai nghe, nếu không trợ lý sẽ nghe chính tiếng loa của mình.</div></li>
+    <li><label><input type="checkbox" checked><span class="t"><b>Trợ lý rảnh tay (T-010)</b>: mic luôn nghe (VAD Silero streaming), gọi tên "Mimi ơi" / "hey Mimi" / "ê Mimi" thì đáp một câu ngẫu nhiên, ngừng nói thì trả lời; tab <b>Mimi</b> (quả cầu trạng thái) + tab <b>Chi tiết</b></span></label>
+      <div class="hint">Bước A (đã làm): Whisper không prompt tìm tên ở đầu câu, so gần đúng sau khi bỏ dấu. Bước B (openWakeWord) chỉ làm nếu A không đạt DoD. Chống loa dội: câu đáp không chứa tên; đoạn nói trước mốc "loa phát xong" chỉ dùng để tìm tên. Ngập ngừng sau tên ("Mimi ơi … EC2 là gì") vẫn là câu hỏi nhờ chờ 300ms trước khi đáp.</div></li>
+    <li><label><input type="checkbox" checked><span class="t">Ghi bộ test gọi tên (<code>data/wake_phrases.tsv</code>, 48 câu), đo bằng <code>bench/wake_bench.py</code>: recall 94%, nhận nhầm 2% với prompt "Hey Mimi. Mimi ơi."</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ghi ≥30 phút âm nền, đo nhận nhầm/giờ</span></label>
+      <div class="hint">Đã đo trên 100 câu testset (âm tính): 0 nhận nhầm, STT tìm tên p50 425ms / p95 544ms; bị cắt nhiều đoạn 14% ở silence 500ms, 1% ở 900ms.</div></li>
     <li><label><input type="checkbox"><span class="t">Nút "đọc lại", "đọc chậm", chỉnh tốc độ đọc</span></label></li>
-    <li><label><input type="checkbox"><span class="t">Lệnh giọng nói đơn giản: "dừng", "đọc lại", "session mới"</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Lệnh giọng nói đơn giản: "dừng", "đọc lại", "session mới"</span></label>
+      <div class="hint"><code>server/assistant/commands.py</code>: chạy ngay trên server, không hỏi Claude (Claude không điều khiển được app). Chỉ câu ngắn mới là lệnh: "đọc lại câu vừa rồi chậm hơn được không" vẫn hỏi Claude.</div></li>
   </ul>
   <h4>Chất lượng STT</h4>
   <ul class="tasks">
@@ -899,7 +905,8 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Mỗi mục đã làm có số liệu trước/sau (term recall, độ trễ, hoặc số lần gặp trong feedback)</span></label></li>
     <li><label><input type="checkbox"><span class="t">Term recall trên testset mở rộng ≥ <span class="metric">95%</span></span></label></li>
     <li><label><input type="checkbox"><span class="t">Ngắt lời: bấm → im lặng ≤ <span class="metric">200ms</span></span></label></li>
-    <li><label><input type="checkbox"><span class="t">VAD (nếu làm): 20 lượt nói tự nhiên → ≤ <span class="metric">1</span> lần cắt giữa câu, ≤ <span class="metric">1</span> lần kích hoạt nhầm</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Rảnh tay (<code>wake_bench.py</code>): gọi tên nhận đúng ≥ <span class="metric">95%</span>; nhận nhầm 0 trên câu gần giống + testset, ≤ <span class="metric">1 lần/giờ</span> âm nền; câu hỏi bị cắt giữa chừng ≤ <span class="metric">1/20</span>; ngừng gọi tên → nghe câu đáp ≤ <span class="metric">1.5s</span></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Ngắt lời bằng giọng (gọi tên lúc đang đọc) ≤ <span class="metric">1.5s</span>; mục 200ms ở trên tính cho nút/phím</span></label></li>
     <li><label><input type="checkbox"><span class="t">Khởi động toàn bộ bằng <span class="metric">1</span> lệnh</span></label></li>
   </ul>
 </section>
@@ -1061,7 +1068,7 @@ Server → Client
   document.querySelectorAll('section').forEach(sec => {
     sec.querySelectorAll('ul.tasks input[type=checkbox]').forEach((cb, i) => {
       cb.dataset.id = `${sec.id}:${i}`;
-      cb.checked = !!saved[cb.dataset.id];
+      cb.checked = cb.dataset.id in saved ? !!saved[cb.dataset.id] : cb.defaultChecked;
       boxes.push(cb);
     });
   });

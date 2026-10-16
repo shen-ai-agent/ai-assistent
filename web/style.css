@@ -77,3 +77,57 @@ button.secondary { background: transparent; color: var(--muted); border: 1px sol
 #speak-sentences { font-size: 13px; color: var(--muted); padding-left: 24px; }
 #speak-sentences li.now { color: var(--text); }
 #speak-sentences .spoken { display: block; font-size: 11px; }
+
+/* ---------- Tab ---------- */
+.tabs { display: flex; gap: 4px; }
+.tabs a { color: var(--muted); text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 14px; }
+.tabs a.active { color: var(--text); background: #262a33; }
+.center { text-align: center; }
+.warn { color: var(--warn); }
+code { font-size: 12px; }
+
+/* ---------- Tab Mimi: orb theo trạng thái ---------- */
+.assistant { max-width: 860px; min-height: calc(100vh - 60px); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; }
+.stage { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+.orb { --level: 0; position: relative; width: 200px; height: 200px; margin: 30px 0 10px; }
+.orb .core, .orb .glow { position: absolute; border-radius: 50%; transition: transform .09s linear, filter .4s, opacity .4s; }
+.orb .core { inset: 0; transform: scale(calc(1 + var(--level) * .22));
+  background: radial-gradient(circle at 35% 30%, #b9d3ff, #4f8cff 45%, #1b3a8a 100%);
+  box-shadow: 0 0 60px rgba(79, 140, 255, .45), inset 0 0 30px rgba(255, 255, 255, .15); }
+.orb .glow { inset: -40px; opacity: .8; transform: scale(calc(1 + var(--level) * .5));
+  background: radial-gradient(circle, rgba(79, 140, 255, .35), transparent 65%); }
+.orb.off .core { filter: grayscale(1) brightness(.45); box-shadow: none; }
+.orb.off .glow { opacity: 0; }
+.orb.idle .core { filter: saturate(.35) brightness(.65); }
+.orb.idle .glow { opacity: .2; }
+.orb.sleep .core { filter: brightness(.7) saturate(.8); animation: breathe 4s ease-in-out infinite; }
+.orb.sleep .glow { opacity: .35; }
+.orb.listening .core { background: radial-gradient(circle at 35% 30%, #c8ffee, #2fd59b 45%, #0d6b4c 100%);
+  box-shadow: 0 0 70px rgba(47, 213, 155, .5), inset 0 0 30px rgba(255, 255, 255, .2); }
+.orb.listening .glow { background: radial-gradient(circle, rgba(47, 213, 155, .4), transparent 65%); }
+.orb.thinking .core { animation: breathe 1.4s ease-in-out infinite; }
+.orb.thinking .glow { inset: -24px; opacity: .9; filter: blur(16px); animation: spin 1.6s linear infinite;
+  background: conic-gradient(from 0deg, #4f8cff, #b36bff, #2fd59b, #4f8cff); }
+.orb.speaking .core { background: radial-gradient(circle at 35% 30%, #ffe0f3, #ff6fb9 45%, #8a1b56 100%);
+  box-shadow: 0 0 70px rgba(255, 111, 185, .5), inset 0 0 30px rgba(255, 255, 255, .2); }
+.orb.speaking .glow { background: radial-gradient(circle, rgba(255, 111, 185, .4), transparent 65%); }
+.orb.error .core { background: radial-gradient(circle at 35% 30%, #ffd0cc, #f85149 50%, #6b1410 100%); }
+@keyframes breathe { 0%, 100% { transform: scale(.94); } 50% { transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.orb-status { font-size: 15px; color: var(--muted); margin: 0; min-height: 1.4em; }
+.caption { font-size: 19px; margin: 0; max-width: 680px; text-align: center; min-height: 1.5em; }
+.caption.dim { color: var(--muted); font-style: italic; }
+.reply { width: 100%; max-width: 700px; max-height: 42vh; overflow-y: auto; background: var(--panel);
+  border: 1px solid #262a33; border-radius: 14px; padding: 14px 18px; font-size: 17px; line-height: 1.6; }
+.reply-text { white-space: pre-wrap; }
+.reply-code { background: #0b0d11; border: 1px solid #262a33; border-radius: 6px; padding: 8px; overflow-x: auto; font-size: 13px; }
+.dock { display: flex; gap: 12px; justify-content: center; margin: 22px 0 6px; }
+.pill { border-radius: 999px; padding: 10px 22px; font-size: 15px; }
+.pill.on { background: var(--ok); }
+
+#heard-log { padding-left: 24px; font-size: 13px; }
+#heard-log li { margin-bottom: 4px; color: var(--muted); }
+#heard-log li.wake { color: var(--text); }
+#heard-log .tag { font-size: 11px; border-radius: 4px; padding: 0 5px; background: #262a33; margin-right: 6px; }
+#heard-log li.wake .tag { color: var(--ok); }

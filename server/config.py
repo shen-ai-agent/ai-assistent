@@ -32,6 +32,8 @@ class Config:
     tts_device: str = "cuda"
     tts_threads: int = 4
     tts_loanwords: bool = False
+    tts_first_chunk_frames: int = 1   # 1 frame = 80ms audio
+    tts_max_chunk_frames: int = 16
     # Bridge tới Claude: mặc định "none" để test không gọi Claude; config.toml chọn claude_cli/clipboard
     bridge_kind: str = "none"
     bridge_auto_ask: bool = True  # transcript xong thì tự hỏi Claude
@@ -43,6 +45,20 @@ class Config:
     bridge_models: list[str] = field(default_factory=lambda: ["sonnet", "opus", "haiku"])  # lựa chọn trên web
     bridge_timeout_s: float = 120
     bridge_log_dir: Path = ROOT / "_local" / "sessions"
+    # Trợ lý rảnh tay (T-010): mic luôn mở, gọi tên mới nghe câu hỏi
+    assistant_name: str = "Mimi"
+    assistant_aliases: list[str] = field(default_factory=lambda: ["mi mi"])
+    assistant_acks: list[str] = field(default_factory=lambda: ["Có mình đây.", "Dạ?", "Mình nghe nè.", "Bạn cần gì nè?"])
+    assistant_wake_min_score: float = 0.8   # độ giống tối thiểu của tên (difflib, sau khi bỏ dấu)
+    assistant_wake_prompt: str = ""         # initial_prompt lúc tìm tên (rỗng = không prompt)
+    assistant_wake_window_s: float = 3.0    # chỉ nhận dạng chừng này giây đầu đoạn nói để tìm tên
+    assistant_min_rest_words: int = 2       # sau tên có từng này từ thì hỏi luôn, không đáp
+    assistant_ack_grace_ms: int = 300       # chỉ gọi tên: chờ thêm trước khi đáp; nói tiếp ("Mimi ơi… EC2 là gì") là câu hỏi
+    assistant_sleep_silence_ms: int = 500  # im lặng bao lâu thì hết đoạn, lúc chờ tên
+    assistant_active_silence_ms: int = 900  # như trên, lúc nghe câu hỏi (người nói hay ngập ngừng)
+    assistant_active_timeout_s: float = 8   # đáp xong mà không nói gì trong chừng này giây thì ngủ lại
+    assistant_follow_up_s: float = 6        # đọc xong câu trả lời, hỏi tiếp không cần gọi tên (0 = tắt)
+    assistant_max_segment_s: float = 30
 
 
 _PATHS = ("bridge_workdir", "bridge_prompt", "bridge_log_dir")
@@ -54,7 +70,8 @@ def load_config(path: Path = DEFAULT_PATH) -> Config:
     tts = {f"tts_{k}": v for k, v in raw.get("tts", {}).items()}
     bridge = {f"bridge_{k}": v for k, v in raw.get("bridge", {}).items()}
     bridge.update({k: ROOT / bridge[k] for k in _PATHS if k in bridge})
-    cfg = Config(**server, **stt, **tts, **bridge)
+    assistant = {f"assistant_{k}": v for k, v in raw.get("assistant", {}).items()}
+    cfg = Config(**server, **stt, **tts, **bridge, **assistant)
     if "dir" in log:
         cfg.log_dir = ROOT / log["dir"]
     cfg.save_audio = log.get("save_audio", cfg.save_audio)

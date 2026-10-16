@@ -20,7 +20,8 @@ log = logging.getLogger("tts")
 class ZeroTtsEngine:
     REPO = "zeroweight-ai/ZeroTTS"
 
-    def __init__(self, voice: str = "maichi", device: str = "cuda", threads: int = 4):
+    def __init__(self, voice: str = "maichi", device: str = "cuda", threads: int = 4,
+                 first_chunk_frames: int = 1, max_chunk_frames: int = 16):
         providers = ["CPUExecutionProvider"]
         if device == "cuda":
             # onnxruntime-gpu dùng cuDNN/cuBLAS có sẵn trong torch/lib; phải nạp torch trước khi tạo session
@@ -30,6 +31,7 @@ class ZeroTtsEngine:
         self.tts = ZeroTTS.from_pretrained(self.REPO, providers=providers, intra_op_num_threads=threads)
         self.sample_rate = self.tts.sample_rate
         self.voice = voice
+        self.chunking = dict(first_chunk_frames=first_chunk_frames, max_chunk_frames=max_chunk_frames)
         self.provider = self.tts.prefix_step_sess.get_providers()[0]
         if device == "cuda" and self.provider != "CUDAExecutionProvider":
             # onnxruntime-gpu sai bản CUDA (vd 1.31 cần CUDA 13) thì tự rơi về CPU mà không báo lỗi
@@ -41,7 +43,7 @@ class ZeroTtsEngine:
 
     def stream(self, text: str, lang: str) -> Iterator[np.ndarray]:
         """Một câu → các mẩu float32 1-D. Mẩu đầu rất ngắn (~80ms audio) để có tiếng sớm."""
-        for chunk in self.tts.synthesize_stream(text, voice=self.voice):
+        for chunk in self.tts.synthesize_stream(text, voice=self.voice, **self.chunking):
             yield np.asarray(chunk, dtype=np.float32).reshape(-1)
 
 

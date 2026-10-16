@@ -370,6 +370,28 @@ def test_new_session_and_disabled(tmp_path, setup):
         assert recv_until(ws, "error")["code"] == "bridge_disabled"
 
 
+def test_voice_commands_skip_claude(tmp_path):
+    bridge, tts = FakeBridge(["EC2 là máy ảo."]), FakeTts()
+    with bridge_client(tmp_path, bridge, tts) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "ask", "text": "Đọc lại đi."})
+            cmd = collect_until(ws, "command")[-1]
+            assert cmd["name"] == "repeat" and cmd["reply"].startswith("Chưa có")
+            collect_until(ws, "speak_end")
+            ws.send_json({"type": "ask", "text": "EC2 là gì?"})
+            collect_until(ws, "answer_end")
+            collect_until(ws, "speak_end")
+            ws.send_json({"type": "ask", "text": "Nhắc lại giúp mình"})
+            assert collect_until(ws, "command")[-1]["reply"] == "EC2 là máy ảo."
+            collect_until(ws, "speak_end")
+            ws.send_json({"type": "ask", "text": "Không, mở session mới đi."})
+            msgs = collect_until(ws, "command")
+            assert {"type": "bridge_session", "session_id": None} in msgs
+            assert msgs[-1]["name"] == "new_session"
+            collect_until(ws, "speak_end")
+    assert bridge.questions == ["EC2 là gì?"]  # lệnh không gửi cho Claude
+
+
 def test_set_model_applies_to_all_tabs(tmp_path):
     bridge = FakeBridge(["Được."])
     with bridge_client(tmp_path, bridge) as client:

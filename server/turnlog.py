@@ -35,12 +35,24 @@ class TurnLogger:
             record["audio_file"] = str(path.relative_to(self.dir).as_posix())
         self._write(record)
 
+    def wake(self, audio: np.ndarray | None, **fields):
+        """Một đoạn nói của chế độ rảnh tay (có tên hay không) vào wake-YYYY-MM-DD.jsonl.
+        Audio chỉ lưu khi có (đoạn nhận ra tên), để xem lại các lần đánh thức nhầm."""
+        record = {"event": "wake", **fields}
+        if audio is not None and self.save_audio:
+            wake_dir = self.dir / "wake-audio"
+            wake_dir.mkdir(parents=True, exist_ok=True)
+            path = wake_dir / f"{new_turn_id()}.wav"
+            sf.write(path, audio, SAMPLE_RATE, subtype="PCM_16")
+            record["audio_file"] = str(path.relative_to(self.dir).as_posix())
+        self._write(record, "wake")
+
     def correction(self, turn_id: str, text: str):
         self._write({"event": "correction", "turn_id": turn_id, "text": text})
 
-    def _write(self, record: dict):
+    def _write(self, record: dict, kind: str = "turns"):
         self.dir.mkdir(parents=True, exist_ok=True)
         record = {"ts": datetime.now().isoformat(timespec="milliseconds"), **record}
-        path = self.dir / f"turns-{datetime.now():%Y-%m-%d}.jsonl"
+        path = self.dir / f"{kind}-{datetime.now():%Y-%m-%d}.jsonl"
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

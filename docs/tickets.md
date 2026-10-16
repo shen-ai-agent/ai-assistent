@@ -13,6 +13,7 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 | T-007 | Vòng tự học có kiểm soát từ bản sửa tay | 2 → 5 | ✅ 16/10/2026 (công cụ); dữ liệu tích luỹ khi dùng |
 | T-008 | TTS: chọn model, chuẩn hoá text, stream về web | 3 | ✅ 16/10/2026 |
 | T-009 | Claude bridge: clipboard + Claude Code headless, stream câu trả lời sang TTS | 4 | 🟡 code xong, còn dùng thật |
+| T-010 | Trợ lý rảnh tay: gọi tên "Mimi", tab Mimi | 5 | 🟡 bước A code xong, chờ ghi bộ test gọi tên |
 
 ---
 
@@ -137,3 +138,59 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 - Thử bridge clipboard trọn vòng trên trình duyệt (nói → paste vào Claude → copy câu trả lời → Ctrl+Alt+R).
 - Dùng thật 3 buổi tối, ghi `_local/feedback.md` ≥5 mục. Để ý: chi phí tăng theo session dài (bấm "Session mới" khi đổi chủ đề), câu cần WebSearch chậm hơn.
 - Người dùng tự đọc điều khoản subscription cho cách dùng `claude -p` này.
+
+## T-010: Trợ lý rảnh tay: gọi tên "Mimi", tab Mimi
+
+**Bối cảnh.** Người dùng muốn giao diện như một trợ lý thật: mic luôn nghe, gọi "Mimi ơi" / "hey Mimi" / "ê Mimi" thì trợ lý đáp một câu ngẫu nhiên ("Có mình đây."), nói câu hỏi, ngừng nói thì trợ lý nghĩ rồi trả lời. Phần số đo, log lượt nói chuyển sang một tab riêng. Thay mục "VAD (Silero) cho chế độ rảnh tay" của Phase 5.
+
+**Hướng làm (đã chốt).** Làm hai bước, có số đo mới đi tiếp.
+- Bước A (đã làm): VAD streaming + Whisper không prompt tìm tên ở đầu câu. Không cần train gì, đổi tên chỉ cần sửa config. Mỗi đoạn nói lúc chờ tên tốn một lượt Whisper (~0.4s GPU).
+- Bước B (chỉ làm nếu bước A không đạt DoD): model wake word riêng (openWakeWord, train từ giọng TTS tổng hợp) chạy trước Whisper. Rẻ hơn, nghe được cả lúc loa đang đọc, nhưng phải train lại khi đổi tên.
+
+**Kết quả bước A (16/10/2026).**
+- `server/assistant/vad.py`: `StreamingVad` chạy Silero v6 có sẵn trong faster-whisper (ONNX, cửa sổ 512 mẫu + 64 mẫu context, giữ trạng thái h/c giữa các frame). Đã kiểm trên 4 câu testset: xác suất khớp tuyệt đối với bản chạy cả file. `Segmenter` cắt đoạn theo ngưỡng trễ (bắt đầu p≥0.5, kết thúc khi p<0.35 liên tục `silence_ms`), có preroll 300ms, bỏ đoạn ngắn hơn 250ms, cắt ép ở 30s.
+- `server/assistant/wake.py`: `WakeMatcher` bỏ dấu, gộp chữ lặp, y = i, rồi so gần đúng (difflib ≥0.8) với tên và alias. Tên chỉ tính khi đứng đầu câu, trước nó tối đa 2 từ gọi (hey, ê, này, alo...). Câu "hôm qua Mimi nói" không đánh thức. Tên không đưa vào `initial_prompt` vì prompt làm Whisper nghe ra tên khi không có. `decide()` chọn ask / ack / ignore, server và benchmark dùng chung.
+- `server/handsfree.py`: máy trạng thái SLEEP → (gọi tên) → BUSY → ACTIVE → SLEEP.
+  - Gọi tên kèm câu hỏi một hơi ("Mimi ơi, EC2 là gì") thì hỏi luôn, không đáp.
+  - Chỉ gọi tên thì chờ thêm `ack_grace_ms` (300ms). Nếu nói tiếp trong lúc đó ("Mimi ơi … EC2 là gì", ngập ngừng làm VAD cắt hai đoạn) thì đoạn sau là câu hỏi; không thì đáp.
+  - Đọc xong câu trả lời thì nghe thêm `follow_up_s` (6s) để hỏi tiếp không cần gọi tên. Im lặng `active_timeout_s` thì ngủ lại.
+  - Chống loa dội vào mic: câu đáp không chứa tên. Mốc "loa phát xong" ước lượng từ lúc bắt đầu đọc + độ dài audio + 400ms. Đoạn nói bắt đầu trước mốc đó chỉ dùng để tìm tên (ngắt lời), không coi là câu hỏi.
+  - Lúc đang đọc, rảnh tay không nhận dạng đoạn nói (VAD vẫn chạy) để GPU dành cho TTS; ngắt lời bằng Space / 🎤. Gọi tên lúc đang nghĩ (chưa đọc) vẫn đáp như bình thường. Giữ Space vẫn chạy như cũ, frame lúc giữ Space không vào bộ tìm tên.
+- Protocol: client `listen {on, topic}`; server `listen(mode)`, `vad(speaking)`, `heard(text, wake, action, ack, stt_ms)`, `hello.assistant`. Log `_local/logs/wake-YYYY-MM-DD.jsonl`, audio của các đoạn có tên lưu ở `wake-audio/`.
+- Web: hai tab. **Mimi** có quả cầu theo trạng thái (ngủ / đang nghe / đang nghĩ / đang nói, sáng theo âm lượng mic hoặc loa), câu vừa nghe, câu trả lời, nút bật rảnh tay (nhớ qua localStorage). **Chi tiết** là giao diện cũ, có thêm danh sách đoạn rảnh tay đã nghe.
+- Bộ test: `data/wake_phrases.tsv` gồm 48 câu: `name` (chỉ gọi tên), `ask` (tên + câu hỏi), `near` (gần giống tên: "mì này", "Minh ơi", "Mỹ Mỹ ơi", nhắc tên giữa câu). Chia dev/holdout. Ghi bằng `bench/record.py --sentences data/wake_phrases.tsv --out data/wake_testset`. Ghi âm nền bằng `record.py --ambient <phút>`.
+- `bench/wake_bench.py`: chạy đúng đường của server (VAD streaming → cắt đoạn → Whisper → match → decide) trên bộ gọi tên, 100 câu testset (âm tính) và âm nền. Báo theo nhóm/split: đúng, có tên, bị cắt; recall, nhận nhầm, nhận nhầm/giờ, STT p50/p95, VRAM.
+- Đo trên 100 câu testset (chưa có bộ gọi tên): 0 lần nhận nhầm. STT tìm tên p50 425ms, p95 544ms. VRAM +3.3GB (cả quá trình). Bị cắt thành nhiều đoạn: 14% ở silence 500ms (lúc chờ tên), 1% ở 900ms (lúc nghe câu hỏi).
+- Thử với server thật (TTS của server đọc câu, đẩy vào /ws): "Mimi ơi" → ack sau 300ms STT; câu không tên → ignore. "Hey Mimi" giọng TTS bị nghe thành "Hãy nhìn đi". Đây là audio tổng hợp nên chưa kết luận được, chờ số đo trên giọng thật.
+- Test: `tests/test_assistant.py` (wake, VAD streaming, segmenter, luồng rảnh tay qua WebSocket với VAD/Whisper giả). 128 test.
+
+**Đo trên giọng người dùng (16/10/2026, 48 câu + 100 câu testset, chưa có âm nền).** Chỉ đọc lỗi ở dev.
+
+| Run | Recall (name+ask) | Nhận nhầm (near+stt) | name/dev | name/holdout | ask/dev | ask/holdout |
+|---|---|---|---|---|---|---|
+| baseline (difflib ratio) | 91% | 3% | 91% | 80% | 100% | 80% |
+| maxlen (điểm = khớp / độ dài chuỗi dài hơn) | 88% | 2% | 82% | 80% | 100% | 80% |
+| p_mimi (prompt "Mimi ơi.") | 84% | 2% | 82% | 60% | 100% | 80% |
+| **p_hey (prompt "Hey Mimi. Mimi ơi.")** | **94%** | **2%** | 100% | 100% | 91% | 80% |
+
+- Bug được sửa (maxlen): "Ê, mai mấy giờ họp" ghép "mai"+"mấy" thành "maimai", nhưng `ratio()` cho 0.8 nên bị nhận là tên. "Ok Mimi" (Whisper nghe "Ok mấy mày") trước đó trúng chỉ vì cùng lỗi này.
+- Không prompt thì Whisper hay nghe sai tên ngắn ("mê mê", "mấy mày"). Prompt sửa được việc này, nhưng có một lỗi mới ở dev: "Mi ơi, đưa mình cái sạc" bị nghe thành "Mimi ơi" (prompt làm Whisper nghe ra tên).
+- Chọn `wake_prompt = "Hey Mimi. Mimi ơi."`. Cần đo âm nền để kiểm nhận nhầm/giờ với prompt.
+- Lỗi còn lại ở dev, không sửa:
+  - "Mỹ Mỹ ơi" trùng tên sau khi bỏ dấu.
+  - "Mi mi mi mi" đúng là âm của tên.
+  - "Mimi ơi, nghe không?" ra `ask` vì sau tên có 2 từ (Claude sẽ đáp, chấp nhận được).
+
+**DoD.** Đo bằng `wake_bench.py`. Riêng mục cuối đo trên trình duyệt.
+- Gọi tên trên bộ gọi tên (dev + holdout): nhận đúng ≥ **95%**.
+- Nhận nhầm: 0 trên `near` + 100 câu testset, ≤ **1 lần/giờ** âm nền.
+- Ngừng gọi tên → nghe câu đáp ≤ **1.5s** (500ms im lặng + ~0.4s STT + 300ms chờ + tiếng đầu TTS).
+- Câu hỏi bị cắt giữa chừng ≤ **1/20** lượt.
+- Ngắt lời: DoD "≤200ms" của Phase 5 tính cho nút bấm/phím Esc. Ngắt bằng giọng phải chờ hết câu gọi tên + STT, mục tiêu ≤ **1.5s**.
+
+**Lệnh giọng nói (16/10/2026).** Khi dùng thật, người dùng nói "mở session mới đi" và Claude chỉ bảo gõ `/clear`, vì Claude không điều khiển được app. Giờ `server/assistant/commands.py` bắt các câu ngắn ("mở session mới", "dừng lại", "đọc lại") trong `start_ask` và chạy ngay trên server, không gửi cho Claude. Web nhận message `command`. Câu dài vẫn hỏi Claude: "đọc lại câu vừa rồi chậm hơn được không" không bị coi là lệnh.
+
+**Còn lại.**
+- Người dùng ghi bộ gọi tên (48 câu, khoảng 5 phút) và ít nhất 30 phút âm nền, rồi chạy `wake_bench.py`. Chỉ sửa alias/ngưỡng theo lỗi ở dev.
+- Thử trên trình duyệt với loa ngoài, không tai nghe. Nếu tiếng loa vẫn đánh thức nhầm hoặc bị nhận thành câu hỏi thì cân nhắc bước B.
+- Chưa có: đổi tên trợ lý trên web, nhận diện giọng người nói.

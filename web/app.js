@@ -1,5 +1,5 @@
-// Voice Study Assistant — web client: push-to-talk (STT), hỏi Claude (bridge), đọc text (TTS).
-// Protocol: server/protocol.py
+// Voice Study Assistant — web client: trợ lý rảnh tay (tab Mimi), push-to-talk (STT), hỏi Claude (bridge),
+// đọc text (TTS). Protocol: server/protocol.py
 
 const PREROLL_FRAMES = 3;            // 300ms trước lúc bấm, để không mất đầu câu
 const BACKOFF_MS = [1000, 2000, 5000];
@@ -15,12 +15,28 @@ const ui = {
   learnCount: $("learn-count"), speak: $("speak"), speakStop: $("speak-stop"), speakText: $("speak-text"),
   speakStatus: $("speak-status"), speakSentences: $("speak-sentences"),
   ask: $("ask"), newSession: $("new-session"), bridgeModel: $("bridge-model"), bridgeStatus: $("bridge-status"),
+  orb: $("orb"), orbStatus: $("orb-status"), caption: $("caption"), reply: $("reply"),
+  replyText: document.querySelector("#reply .reply-text"), replyCode: document.querySelector("#reply .reply-code"),
+  hfToggle: $("hf-toggle"), mimiStop: $("mimi-stop"), echoHint: $("echo-hint"), mimiError: $("mimi-error"),
+  heardLog: $("heard-log"),
 };
+
+// ---------- Tab: #mimi (mặc định) / #detail, một trang để dùng chung WebSocket và mic ----------
+
+function showTab() {
+  const tab = location.hash === "#detail" ? "detail" : "mimi";
+  for (const el of document.querySelectorAll(".tab")) el.hidden = el.id !== `tab-${tab}`;
+  for (const a of document.querySelectorAll(".tabs a")) a.classList.toggle("active", a.dataset.tab === tab);
+}
+addEventListener("hashchange", showTab);
+showTab();
 
 // ---------- State machine: IDLE → LISTENING → TRANSCRIBING → (WAITING_CLAUDE) → IDLE (+ ERROR) ----------
 
 let state = "IDLE";
 let releasedAt = 0;
+let turnEndAt = 0;     // lúc lượt nói kết thúc: thả phím (push-to-talk) hoặc ngừng nói (rảnh tay)
+let turnSource = "ptt";
 
 function setState(next) {
   state = next;
@@ -40,11 +56,17 @@ function refreshTalkButton() {
   ui.newSession.disabled = !(open && bridge.info?.kind === "claude_cli");
   ui.bridgeModel.disabled = !open;
   ui.speakStop.disabled = !(player.active || bridge.asking);
+  ui.mimiStop.disabled = ui.speakStop.disabled;
+  ui.hfToggle.disabled = !(open && mic.ready);
+  ui.hfToggle.classList.toggle("on", hf.on);
+  ui.hfToggle.textContent = hf.on ? "🎙 Rảnh tay: bật" : "🎙 Rảnh tay: tắt";
+  ui.echoHint.hidden = !(hf.on && player.tts && !audioOptions().echoCancellation);
+  renderOrb();
 }
 
 function showError(text) {
-  ui.error.textContent = text;
-  ui.error.hidden = !text;
+  ui.error.textContent = ui.mimiError.textContent = text;
+  ui.error.hidden = ui.mimiError.hidden = !text;
 }
 
 // ---------- WebSocket, tự kết nối lại ----------
@@ -89,14 +111,30 @@ function onServerMessage(msg) {
       bridge.info = msg.bridge;
       showBridge(msg.bridge?.session_id);
       fillModels(msg.bridge);
+      hf.info = msg.assistant;
+      for (const el of document.querySelectorAll(".wake-name")) el.textContent = msg.assistant?.name ?? "Mimi";
+      hf.mode = "OFF";
+      if (hf.on) sendListen(); // kết nối lại: server đã quên chế độ rảnh tay
       setState("IDLE");
+      break;
+    case "listen":
+      hf.mode = msg.mode;
+      renderOrb();
+      break;
+    case "vad":
+      onVad(msg.speaking);
+      break;
+    case "heard":
+      onHeard(msg);
       break;
     case "state":
       // LISTENING/TRANSCRIBING đã được client đặt trước cho nhanh; nhận IDLE và WAITING_CLAUDE từ server
       if ((msg.value === "IDLE" || msg.value === "WAITING_CLAUDE") && state !== "LISTENING") setState(msg.value);
       break;
     case "transcript":
-      addTurn(msg, performance.now() - releasedAt);
+      addTurn(msg, performance.now() - turnEndAt);
+      ui.caption.textContent = msg.text;
+      ui.caption.className = "caption";
       break;
     case "answer_start":
       onAnswerStart(msg);
@@ -109,6 +147,9 @@ function onServerMessage(msg) {
       break;
     case "bridge_session":
       showBridge(msg.session_id);
+      break;
+    case "command":
+      onCommand(msg);
       break;
     case "bridge_model":
       if (bridge.info) bridge.info.model = msg.model;
@@ -144,11 +185,14 @@ function fillTopics(topics) {
   for (const t of topics) ui.topic.add(new Option(t, t));
   ui.topic.value = topics.includes(saved) ? saved : "";
 }
-ui.topic.onchange = () => localStorage.setItem("topic", ui.topic.value);
+ui.topic.onchange = () => {
+  localStorage.setItem("topic", ui.topic.value);
+  if (hf.on) sendListen(); // server dùng chủ đề này cho câu hỏi rảnh tay
+};
 
 // ---------- Mic: mở liên tục, giữ buffer vòng cho pre-roll ----------
 
-const mic = { ready: false, ctx: null, stream: null, node: null, preroll: [] };
+const mic = { ready: false, ctx: null, stream: null, node: null, preroll: [], level: 0 };
 
 function audioOptions() {
   const opts = {};
@@ -214,10 +258,12 @@ function stopMic() {
 }
 
 function onFrame(pcm, level) {
-  ui.level.style.width = `${Math.min(100, Math.sqrt(level) * 180)}%`;
-  if (state === "LISTENING") {
-    send(pcm);
-  } else {
+  mic.level = Math.min(1, Math.sqrt(level) * 1.8);
+  ui.level.style.width = `${mic.level * 100}%`;
+  if (state === "LISTENING" || hf.mode !== "OFF") {
+    send(pcm); // rảnh tay: gửi liên tục, server tự cắt đoạn nói
+  }
+  if (state !== "LISTENING") {
     mic.preroll.push(pcm);
     if (mic.preroll.length > PREROLL_FRAMES) mic.preroll.shift();
   }
@@ -233,7 +279,10 @@ for (const k of AUDIO_OPTS) {
 }
 
 // AudioContext tạo trước thao tác người dùng sẽ bị treo (autoplay policy): resume ở lần chạm đầu
-const resumeAudio = () => mic.ctx?.state === "suspended" && mic.ctx.resume();
+const resumeAudio = () => {
+  if (mic.ctx?.state === "suspended") mic.ctx.resume();
+  if (hf.on) ensurePlayer(); // tải lại trang lúc đang rảnh tay: chạm lần đầu thì tạo luôn bộ phát
+};
 addEventListener("pointerdown", resumeAudio, true);
 addEventListener("keydown", resumeAudio, true);
 
@@ -255,7 +304,8 @@ function beginTalk() {
 function endTalk() {
   if (state !== "LISTENING") return;
   send({ type: "stop" });
-  releasedAt = performance.now();
+  releasedAt = turnEndAt = performance.now();
+  turnSource = "ptt";
   setState("TRANSCRIBING");
 }
 
@@ -269,7 +319,7 @@ function cancelTalk() {
 const isTyping = (el) => el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT" || el.tagName === "SELECT" || el.isContentEditable);
 
 addEventListener("keydown", (e) => {
-  if (e.code === "Escape") return player.active || bridge.asking ? stopSpeaking() : cancelTalk();
+  if (e.code === "Escape") return player.active || bridge.asking || hf.mode === "ACTIVE" ? stopSpeaking() : cancelTalk();
   if (e.code !== "Space" || isTyping(document.activeElement)) return;
   e.preventDefault();
   if (!e.repeat) beginTalk();
@@ -289,17 +339,131 @@ ui.talk.addEventListener("pointerup", endTalk);
 ui.talk.addEventListener("pointercancel", endTalk);
 ui.talk.addEventListener("keydown", (e) => e.code === "Space" && e.preventDefault()); // không "click" nút bằng Space
 
+// ---------- Rảnh tay (T-010): mic gửi liên tục, server cắt đoạn nói và chờ gọi tên ----------
+
+// on: người dùng muốn bật (nhớ qua lần tải lại). mode: trạng thái server báo (OFF/SLEEP/ACTIVE/BUSY).
+// endAt: lúc (ước lượng) người dùng ngừng nói = lúc VAD báo hết đoạn trừ khoảng im lặng server chờ.
+const hf = { on: localStorage.getItem("handsfree") === "1", mode: "OFF", info: null, speaking: false,
+  endAt: 0, ackFrom: null, ackSpeakId: null, ackLi: null };
+
+function sendListen() {
+  send({ type: "listen", on: hf.on, topic: ui.topic.value || null });
+}
+
+function toggleHandsFree() {
+  hf.on = !hf.on;
+  localStorage.setItem("handsfree", hf.on ? "1" : "0");
+  resumeAudio();
+  ensurePlayer(); // AudioContext phải tạo trong thao tác người dùng, để câu đáp phát được
+  sendListen();
+  refreshTalkButton();
+}
+
+function onVad(speaking) {
+  hf.speaking = speaking;
+  if (!speaking && state !== "LISTENING") {
+    const silence = hf.mode === "ACTIVE" ? hf.info?.active_silence_ms : hf.info?.sleep_silence_ms;
+    hf.endAt = performance.now() - (silence ?? 0);
+    turnEndAt = hf.endAt;
+    turnSource = "hf";
+  }
+}
+
+function onHeard(msg) {
+  const li = document.createElement("li");
+  li.className = msg.wake ? "wake" : "";
+  const tag = document.createElement("span");
+  tag.className = "tag";
+  tag.textContent = { ack: "gọi", ask: "gọi + hỏi", ignore: "bỏ qua" }[msg.action] ?? msg.action;
+  li.append(tag, `${new Date().toLocaleTimeString()} · "${msg.text}" · STT ${msg.stt_ms}ms`);
+  ui.heardLog.prepend(li);
+  while (ui.heardLog.children.length > 100) ui.heardLog.lastChild.remove();
+  if (!msg.wake) return;
+  stopPlayback(); // gọi tên lúc đang đọc: server đã ngắt, client tắt tiếng ngay
+  bridge.asking = false;
+  ui.caption.textContent = msg.text;
+  ui.caption.className = "caption dim";
+  if (msg.ack) {
+    hf.ackFrom = hf.endAt;
+    hf.ackLi = li;
+    showReply(msg.ack);
+  }
+  refreshTalkButton();
+}
+
+function showReply(text, code = "") {
+  ui.reply.hidden = false;
+  ui.replyText.textContent = text;
+  ui.replyCode.hidden = !code;
+  ui.replyCode.textContent = code;
+}
+
+// Orb: off → idle (tắt rảnh tay) / sleep (chờ tên) → listening → thinking → speaking
+function orbState() {
+  if (ws?.readyState !== WebSocket.OPEN || !mic.ready) return "off";
+  if (state === "ERROR") return "error";
+  if (state === "LISTENING") return "listening";
+  if (player.active && player.sources.size) return "speaking";
+  if (state === "TRANSCRIBING" || state === "WAITING_CLAUDE" || bridge.asking || player.active) return "thinking";
+  if (hf.mode === "ACTIVE") return "listening";
+  if (hf.mode !== "OFF") return "sleep";
+  return "idle";
+}
+
+function orbStatus(s) {
+  const name = hf.info?.name ?? "Mimi";
+  if (s === "off") return ws?.readyState !== WebSocket.OPEN ? "Mất kết nối server…" : "Chưa mở được micro";
+  if (mic.ctx?.state === "suspended" && hf.on) return "Bấm vào trang một lần để bật micro";
+  return {
+    error: "Có lỗi, xem bên dưới",
+    listening: state === "LISTENING" ? "Đang nghe (thả Space khi nói xong)…" : "Mình đang nghe…",
+    thinking: "Đang nghĩ…",
+    speaking: "",
+    sleep: `Nói "${name} ơi" để gọi`,
+    idle: "Bật Rảnh tay, hoặc giữ Space để nói",
+  }[s];
+}
+
+const outLevel = new Float32Array(512);
+function renderOrb() {
+  const s = orbState();
+  ui.orb.className = `orb ${s}`;
+  ui.orbStatus.textContent = orbStatus(s);
+  let level = 0;
+  if (s === "listening") level = mic.level;
+  else if (s === "speaking" && player.analyser) {
+    player.analyser.getFloatTimeDomainData(outLevel);
+    let sum = 0;
+    for (const v of outLevel) sum += v * v;
+    level = Math.min(1, Math.sqrt(sum / outLevel.length) * 4);
+  } else if (s === "sleep" && hf.speaking) level = mic.level * 0.4; // có tiếng nói nhưng chưa gọi tên
+  ui.orb.style.setProperty("--level", level.toFixed(3));
+}
+
+function orbLoop() {
+  if (!document.hidden) renderOrb();
+  requestAnimationFrame(orbLoop);
+}
+
+ui.hfToggle.onclick = toggleHandsFree;
+ui.mimiStop.onclick = () => stopSpeaking();
+
 // ---------- Đọc: nhận PCM int16 từng mẩu, xếp lịch phát nối tiếp ----------
 
 // id: speak_id đang phát; frame của lượt cũ (đến muộn sau khi dừng) bị bỏ.
 // nextTime: thời điểm (theo ctx.currentTime) mẩu kế tiếp bắt đầu. Đo: tiếng đầu tính từ lúc bấm Đọc;
 // maxGapS = lần hết audio lâu nhất trong lúc chờ mẩu sau (DoD: khoảng lặng giữa câu ≤ 0.5s).
-const player = { tts: null, ctx: null, id: -1, active: false, ended: false, sources: new Set(), nextTime: 0,
+const player = { tts: null, ctx: null, analyser: null, id: -1, active: false, ended: false, sources: new Set(), nextTime: 0,
   pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, items: [] };
 
 function ensurePlayer() {
   if (!player.tts) return;
-  if (!player.ctx) player.ctx = new AudioContext({ sampleRate: player.tts.sample_rate });
+  if (!player.ctx) {
+    player.ctx = new AudioContext({ sampleRate: player.tts.sample_rate });
+    player.analyser = player.ctx.createAnalyser(); // âm lượng đang phát, cho orb
+    player.analyser.fftSize = 512;
+    player.analyser.connect(player.ctx.destination);
+  }
   player.ctx.resume();
 }
 
@@ -332,6 +496,11 @@ function stopPlayback() {
 }
 
 function onSpeakStart(msg) {
+  if (hf.ackFrom !== null) {
+    player.clickedAt = hf.ackFrom;
+    hf.ackSpeakId = msg.speak_id;
+    hf.ackFrom = null;
+  }
   player.id = msg.speak_id;
   player.active = true;
   player.ended = false;
@@ -386,6 +555,10 @@ function onAudio(buf) {
   if (player.firstAudioMs === null) {
     start = now + PLAY_LEAD_S;
     player.firstAudioMs = performance.now() - player.clickedAt + PLAY_LEAD_S * 1000;
+    if (hf.ackSpeakId === id && hf.ackLi) {
+      hf.ackLi.append(` · ngừng nói → nghe câu đáp ${Math.round(player.firstAudioMs)}ms`);
+      hf.ackLi = null;
+    }
     if (bridge.current?.speakId === id) {
       bridge.current.firstAudioMs = player.firstAudioMs; // DoD Phase 4: thả phím → nghe câu đầu
       renderAnswerMeta(bridge.current);
@@ -399,7 +572,7 @@ function onAudio(buf) {
 
   const src = player.ctx.createBufferSource();
   src.buffer = audio;
-  src.connect(player.ctx.destination);
+  src.connect(player.analyser);
   src.onended = () => {
     player.sources.delete(src);
     if (!player.sources.size && id === player.id && player.ended) finishPlayback();
@@ -484,7 +657,7 @@ function onAnswerStart(msg) {
     box.readOnly = true;
     ui.history.prepend(el);
   } else {
-    bridge.startedAt = releasedAt; // lượt nói: đo từ lúc thả phím
+    bridge.startedAt = turnEndAt; // lượt nói: đo từ lúc thả phím / ngừng nói
   }
   bridge.pendingTurn = null;
   bridge.asking = true;
@@ -492,6 +665,7 @@ function onAnswerStart(msg) {
   if (msg.speak_id !== null) player.clickedAt = bridge.startedAt;
   el.querySelector(".answer").hidden = false;
   el.querySelector(".answer-meta").textContent = "Claude đang trả lời…";
+  showReply("");
   refreshTalkButton();
 }
 
@@ -500,10 +674,29 @@ function onAnswerDelta(msg) {
   if (cur?.askId !== msg.ask_id) return;
   cur.raw += msg.text;
   const i = cur.raw.indexOf(CODE_MARKER);
-  cur.el.querySelector(".answer-text").textContent = i < 0 ? cur.raw : cur.raw.slice(0, i);
+  const text = i < 0 ? cur.raw : cur.raw.slice(0, i);
+  const codeText = i < 0 ? "" : cur.raw.slice(i + CODE_MARKER.length).trim();
+  cur.el.querySelector(".answer-text").textContent = text;
   const code = cur.el.querySelector(".answer-code");
   code.hidden = i < 0;
-  if (i >= 0) code.textContent = cur.raw.slice(i + CODE_MARKER.length).trim();
+  code.textContent = codeText;
+  showReply(text, codeText);
+}
+
+// Lệnh giọng nói (mở session mới / dừng / đọc lại): server tự chạy, không hỏi Claude
+function onCommand(msg) {
+  const label = { new_session: "mở session mới", stop: "dừng", repeat: "đọc lại" }[msg.name] ?? msg.name;
+  const el = bridge.pendingTurn;
+  bridge.pendingTurn = null;
+  bridge.asking = false;
+  if (el) {
+    el.querySelector(".answer").hidden = false;
+    el.querySelector(".answer-text").textContent = msg.reply ?? "";
+    el.querySelector(".answer-meta").textContent = `lệnh: ${label}`;
+  }
+  if (msg.name === "stop") stopPlayback();
+  if (msg.reply) showReply(msg.reply);
+  refreshTalkButton();
 }
 
 function onAnswerEnd(msg) {
@@ -511,7 +704,10 @@ function onAnswerEnd(msg) {
   if (cur?.askId !== msg.ask_id) return;
   bridge.asking = false;
   cur.end = msg;
-  if (msg.error) cur.el.querySelector(".answer-text").textContent += `\n[lỗi] ${msg.error}`;
+  if (msg.error) {
+    cur.el.querySelector(".answer-text").textContent += `\n[lỗi] ${msg.error}`;
+    ui.replyText.textContent += `\n[lỗi] ${msg.error}`;
+  }
   if (msg.session_id !== undefined && bridge.info) showBridge(msg.session_id);
   renderAnswerMeta(cur);
   refreshTalkButton();
@@ -526,7 +722,7 @@ function renderAnswerMeta(cur) {
     m.cost_usd != null && `$${m.cost_usd.toFixed(3)}`,
     m.model && m.model.replace(/^claude-/, ""),
   ];
-  if (cur.firstAudioMs !== null) parts.push(`thả phím/bấm → nghe câu đầu ${(cur.firstAudioMs / 1000).toFixed(1)}s`);
+  if (cur.firstAudioMs !== null) parts.push(`thả phím/ngừng nói/bấm → nghe câu đầu ${(cur.firstAudioMs / 1000).toFixed(1)}s`);
   cur.el.querySelector(".answer-meta").textContent = parts.filter(Boolean).join(" · ");
 }
 
@@ -538,7 +734,7 @@ function addTurn(msg, roundTripMs) {
   const box = li.querySelector("textarea");
   const topic = msg.topic ? `${msg.topic}${msg.topic_auto ? " (tự đoán)" : ""}` : "không rõ chủ đề";
   meta.textContent = `${new Date().toLocaleTimeString()} · ${topic} · audio ${(msg.audio_ms / 1000).toFixed(1)}s`
-    + ` · STT ${msg.stt_ms}ms · thả phím → text ${Math.round(roundTripMs)}ms`;
+    + ` · STT ${msg.stt_ms}ms · ${turnSource === "hf" ? "rảnh tay · ngừng nói" : "thả phím"} → text ${Math.round(roundTripMs)}ms`;
   box.value = msg.text;
   let sent = msg.text;
   box.addEventListener("change", () => {
@@ -567,6 +763,7 @@ async function refreshLearnCount() {
 // ---------- Khởi động ----------
 
 setState("IDLE");
+orbLoop();
 connect();
 startMic();
 refreshLearnCount();

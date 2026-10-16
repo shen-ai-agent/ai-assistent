@@ -88,6 +88,13 @@ class SttService:
         text = self._corrector.get().apply(res.text)
         return SttResult(text, res.text, topic, topic_auto, round((time.perf_counter() - t0) * 1000))
 
+    def transcribe_plain(self, audio: np.ndarray, prompt: str | None = None) -> tuple[str, int]:
+        """Nhận dạng không glossary, không corrections, trả (text, stt_ms). Dùng để tìm tên gọi trợ lý:
+        prompt glossary kéo câu về thuật ngữ. prompt: chỉ cấu hình assistant.wake_prompt (đo bằng wake_bench)."""
+        t0 = time.perf_counter()
+        res = self._run(audio, prompt or None)
+        return res.text, round((time.perf_counter() - t0) * 1000)
+
     def _run(self, audio, prompt):
         return self.engine.transcribe(audio, language=self.language, initial_prompt=prompt,
                                       beam_size=self.beam_size)

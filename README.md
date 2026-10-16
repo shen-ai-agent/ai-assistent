@@ -123,3 +123,31 @@ Câu trả lời hiện dưới lượt nói; phần code (sau `---CODE---`) ch�
 .venv\Scripts\python bench\claude_ws_client.py          # thả phím → nghe câu đầu, kiểm tra nhớ ngữ cảnh
 .venv\Scripts\python bench\claude_ws_client.py --text   # hỏi bằng text, bỏ qua STT
 ```
+
+## Trợ lý rảnh tay "Mimi" (T-010)
+
+Tab **Mimi** (mặc định) là giao diện trợ lý; tab **Chi tiết** là giao diện cũ (lượt nói, transcript, số đo, đoạn rảnh tay đã nghe).
+
+1. Bấm nút 🎙 **Rảnh tay** (trình duyệt cần được bấm/chạm một lần sau khi tải trang mới phát được âm thanh). Trạng thái bật được nhớ cho lần sau.
+2. Gọi tên ở **đầu câu**: "Mimi ơi", "hey Mimi", "ê Mimi", "này Mimi"... Trợ lý đáp một câu ngẫu nhiên ("Có mình đây.", "Dạ?"...).
+3. Nói câu hỏi, ngừng nói ~1 giây thì trợ lý nghĩ và trả lời. Đọc xong còn nghe thêm 6 giây để hỏi tiếp không cần gọi tên.
+4. Nói liền "Mimi ơi, EC2 là gì?" thì hỏi luôn, không đáp.
+5. Đang đọc mà gọi tên thì trợ lý dừng và nghe câu mới. `Esc` / ⏹ cũng dừng. Giữ Space vẫn dùng được như cũ.
+
+- Nhắc tên giữa câu ("hôm qua Mimi nói...") không đánh thức trợ lý.
+- Lệnh chạy ngay, không hỏi Claude (cả khi gõ tay): "mở session mới" / "phiên mới" / "quên hết", "dừng lại" / "thôi", "đọc lại" / "nhắc lại". Chỉ câu ngắn mới là lệnh; câu dài vẫn gửi cho Claude.
+- Dùng **tai nghe** là chắc nhất. Với loa ngoài, trợ lý không coi tiếng nói lúc loa còn đang đọc là câu hỏi, nhưng tiếng loa vẫn có thể lọt vào câu hỏi nếu bạn nói chồng lên.
+- Cấu hình ở bảng `[assistant]` của `server/config.toml`: tên, `aliases` (cách Whisper hay viết sai tên), các câu đáp (đừng chứa tên), ngưỡng, thời gian im lặng.
+- Log: `_local/logs/wake-YYYY-MM-DD.jsonl` (mọi đoạn nghe được lúc chờ tên), audio các đoạn có tên ở `_local/logs/wake-audio/`.
+
+Đo nhận tên (tắt server trước, cần GPU):
+
+```powershell
+.venv\Scripts\python bench\record.py --sentences data\wake_phrases.tsv --out data\wake_testset   # 48 câu, ~5 phút
+.venv\Scripts\python bench\record.py --ambient 30      # 30 phút âm nền, sinh hoạt bình thường, không gọi tên
+.venv\Scripts\python bench\wake_bench.py               # tham số trong config.toml
+.venv\Scripts\python bench\wake_bench.py --name s075 --min-score 0.75
+.venv\Scripts\python bench\wake_bench.py --compare
+```
+
+Benchmark dùng cả 100 câu `data/testset` làm câu âm tính (không có tên). Chỉ sửa `aliases`/ngưỡng theo lỗi ở **dev**.
