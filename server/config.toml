@@ -15,6 +15,14 @@ min_audio_ms = 300        # ngắn hơn thì coi là bấm nhầm
 min_speech_ms = 200       # VAD thấy ít tiếng nói hơn thì bỏ qua lượt (0 = tắt), tránh Whisper bịa câu
 max_audio_s = 120         # dài hơn thì cắt, tránh giữ phím quên thả
 
+[tts]
+# Chọn theo benchmark Phase 3 (_local/tts_report.md)
+enabled = true
+voice = "maichi"          # baotrang giahuy hamy huuduc kimoanh maichi quangminh tiendat
+device = "cuda"           # cần onnxruntime-gpu 1.23.2 (xem README); "cpu" thì RTF ~1, dễ khựng
+threads = 4
+loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
+
 [log]
 dir = "_local/logs"
 save_audio = true         # lưu wav từng lượt để benchmark lại audio đi qua trình duyệt

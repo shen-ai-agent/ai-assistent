@@ -26,12 +26,19 @@ class Config:
     save_audio: bool = True
     glossary: Path = ROOT / "data" / "glossary.txt"
     corrections: Path = ROOT / "data" / "corrections.tsv"
+    # TTS: mặc định tắt để test không load model; config.toml bật
+    tts_enabled: bool = False
+    tts_voice: str = "maichi"
+    tts_device: str = "cuda"
+    tts_threads: int = 4
+    tts_loanwords: bool = False
 
 
 def load_config(path: Path = DEFAULT_PATH) -> Config:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     server, stt, log = raw.get("server", {}), raw.get("stt", {}), raw.get("log", {})
-    cfg = Config(**server, **stt)
+    tts = {f"tts_{k}": v for k, v in raw.get("tts", {}).items()}
+    cfg = Config(**server, **stt, **tts)
     if "dir" in log:
         cfg.log_dir = ROOT / log["dir"]
     cfg.save_audio = log.get("save_audio", cfg.save_audio)

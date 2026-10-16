@@ -42,6 +42,18 @@
     <p id="error" class="error" hidden></p>
   </section>
 
+  <section class="speak">
+    <h2>Đọc</h2>
+    <textarea id="speak-text" rows="3" spellcheck="false"
+      placeholder="Dán đoạn trả lời vào đây rồi bấm Đọc (Ctrl+Enter)."></textarea>
+    <div class="speak-bar">
+      <button id="speak" disabled>Đọc</button>
+      <button id="speak-stop" class="secondary" disabled>⏹ Dừng</button>
+      <span id="speak-status" class="hint"></span>
+    </div>
+    <ol id="speak-sentences"></ol>
+  </section>
+
   <section>
     <h2>Lịch sử phiên</h2>
     <p class="hint">Sửa trực tiếp transcript nếu sai (nhớ gõ đủ dấu cách). Lỗi lặp từ 2 lượt trở lên sẽ thành

@@ -4,6 +4,10 @@ torch==2.11.0
 
 # STT
 faster-whisper==1.2.1
+# TTS (Phase 3). onnxruntime-gpu 1.23.2 đã kiểm chạy được với CUDA 12 của torch cu128; 1.31 cần CUDA 13 nên lặng lẽ chạy CPU.
+# faster-whisper kéo theo onnxruntime bản CPU, hai gói ghi đè nhau: xem bước cài trong README.
+zerotts==0.1.5
+onnxruntime-gpu==1.23.2
 # Voice server
 fastapi==0.143.2
 uvicorn[standard]==0.54.0

@@ -1,0 +1,132 @@
+# Đoạn mẫu cho benchmark TTS (Phase 3). Mỗi đoạn bắt đầu bằng dòng "=== <id> <nhóm>".
+# Nhóm: clean (văn nói sạch), term (nhiều thuật ngữ), dirty (markdown, số, ký hiệu như Claude hay trả), en (tiếng Anh).
+# Đoạn được đưa qua server.tts.normalize.prepare() trước khi tổng hợp, giống lúc chạy thật.
+
+=== c01 clean
+Chào bạn, hôm nay mình ôn lại phần mạng trước nhé. Bạn còn nhớ subnet công khai khác subnet riêng ở điểm nào không?
+
+=== c02 clean
+Câu trả lời của bạn gần đúng rồi. Chỉ thiếu một ý nhỏ thôi: dữ liệu phải được sao lưu sang vùng khác thì mới chịu được sự cố cả khu vực.
+
+=== c03 clean
+Không sao, câu này nhiều người nhầm lắm. Mình giải thích lại chậm hơn một chút nhé.
+
+=== c04 clean
+Phần nghe hôm nay bạn làm tốt hơn tuần trước khá nhiều. Lỗi còn lại chủ yếu là nghe nhầm số và tên riêng.
+
+=== c05 clean
+Trước khi sang bài mới, bạn thử tóm tắt lại bằng lời của mình xem sao. Nói ngắn thôi, khoảng ba bốn câu là đủ.
+
+=== c06 clean
+Cách học hiệu quả nhất là tự giải thích lại cho người khác. Nếu bạn giải thích trôi chảy được thì nghĩa là bạn đã hiểu thật.
+
+=== c07 clean
+Bạn đã học liên tục gần một tiếng rồi đấy. Nghỉ năm phút, uống nước rồi mình làm tiếp phần luyện đề nhé.
+
+=== c08 clean
+Đúng rồi! Chính xác là như vậy. Bạn nắm phần này chắc rồi, mình chuyển sang câu tiếp theo.
+
+=== c09 clean
+Hmm, câu này hơi mẹo. Đề bài hỏi cách rẻ nhất, chứ không hỏi cách nhanh nhất, nên đáp án phải khác.
+
+=== c10 clean
+Tối nay bạn chỉ cần ôn lại hai chủ đề: phân quyền và lưu trữ. Sáng mai mình sẽ hỏi lại ngẫu nhiên mười câu.
+
+=== t01 term
+Với bài này bạn nên dùng Lambda đứng sau API Gateway, dữ liệu lưu trong DynamoDB, còn file tĩnh thì để ở S3 và phân phối qua CloudFront.
+
+=== t02 term
+EC2 chạy trong private subnet thì muốn ra internet phải đi qua NAT Gateway. Còn muốn nhận traffic từ ngoài vào thì đặt ALB ở public subnet.
+
+=== t03 term
+IAM role khác IAM user ở chỗ role không có mật khẩu cố định. Service như EC2 hay Lambda sẽ assume role và nhận credential tạm thời.
+
+=== t04 term
+Trong ASP.NET Core, bạn đăng ký HttpClient qua IHttpClientFactory để tránh lỗi cạn socket. Đừng tạo HttpClient mới trong mỗi request.
+
+=== t05 term
+EF Core trả về IQueryable thì câu SQL chỉ chạy khi bạn gọi ToList hoặc duyệt kết quả. Nếu đổi sang IEnumerable quá sớm thì LINQ sẽ lọc trong bộ nhớ.
+
+=== t06 term
+Pipeline CI/CD của bạn có thể dùng GitHub Actions: build Docker image, đẩy lên ECR rồi deploy lên ECS với Fargate.
+
+=== t07 term
+JWT gồm ba phần: header, payload và chữ ký. Với OAuth2 kiểu public client như app mobile thì nên bật PKCE.
+
+=== t08 term
+SQS phù hợp khi bạn cần hàng đợi và xử lý lại khi lỗi. SNS thì để phát một sự kiện tới nhiều nơi cùng lúc, thường kết hợp với SQS.
+
+=== t09 term
+Phần IELTS Speaking Part 2 bạn nên nói đủ hai phút. Với TOEIC thì phần năm và sáu tập trung vào ngữ pháp và collocation.
+
+=== t10 term
+Muốn RDS chịu được sự cố một AZ thì bật Multi-AZ. Còn muốn giảm tải đọc thì thêm read replica, có thể đặt ở region khác.
+
+=== d01 dirty
+## Tóm tắt nhanh
+
+- **EC2**: máy ảo, tính tiền theo giờ (khoảng $0.0116/giờ với t3.micro)
+- **Lambda**: tính theo request và thời gian chạy, cold start 200-500ms
+- **Fargate**: chạy container, không cần quản lý server
+
+=== d02 dirty
+| Dịch vụ | Giá lưu trữ |
+|---|---|
+| S3 Standard | 0,023 đô/GB |
+| S3 Glacier | 0,004 đô/GB |
+
+Nếu dữ liệu ít truy cập thì Glacier rẻ hơn gần 6 lần.
+
+=== d03 dirty
+Bạn chạy lệnh sau để tạo project:
+
+```bash
+dotnet new webapi -n StudyApi
+cd StudyApi && dotnet run
+```
+
+Sau đó mở https://localhost:5001/swagger để thử API.
+
+=== d04 dirty
+Python 3.11 nhanh hơn bản trước khoảng 25%. Bản .NET 8 ra ngày 14/11/2023, là bản LTS được hỗ trợ 3 năm.
+
+=== d05 dirty
+Lỗi nằm ở file `appsettings.json`, dòng 12: chuỗi kết nối thiếu `TrustServerCertificate=true`. Sửa xong thì chạy lại `dotnet run`.
+
+=== d06 dirty
+> Lưu ý: bucket S3 mặc định là *private*.
+
+Muốn public thì phải tắt Block Public Access **và** thêm bucket policy (xem [tài liệu](https://docs.aws.amazon.com/s3/)).
+
+=== d07 dirty
+Kết quả bài thi thử: Listening 420/495, Reading 385/495, tổng 805 điểm. Mục tiêu 900+ thì phần Reading cần tăng thêm khoảng 60-80 điểm.
+
+=== d08 dirty
+Luồng xử lý: client -> API Gateway -> Lambda -> DynamoDB. Timeout tối đa của Lambda là 15 phút, bộ nhớ từ 128MB đến 10.240MB.
+
+=== d09 dirty
+1. Tạo VPC với CIDR 10.0.0.0/16
+2. Chia 2 public subnet và 2 private subnet ở 2 AZ
+3. Gắn Internet Gateway và NAT Gateway
+4. Cập nhật route table
+
+---CODE---
+resource "aws_vpc" "main" { cidr_block = "10.0.0.0/16" }
+
+=== d10 dirty
+Ví dụ, e.g. khi dùng `async`/`await` trong C#, đừng gọi `.Result` vì dễ deadlock. Tương tự với các API khác như ReadAsync, WriteAsync v.v. Bạn nhớ nhé!
+
+=== e01 en
+That's a good answer. Could you give me a specific example from your own experience?
+
+=== e02 en
+I have been working as a software developer for three years, and I mainly build web applications with .NET and AWS.
+
+=== e03 en
+Try to use a wider range of linking words, such as however, moreover, and on the other hand.
+
+=== e04 en
+The report must be submitted by Friday, so please review the figures before the meeting.
+
+=== e05 en
+Well, to be honest, I prefer studying in the morning because my mind is much clearer then.

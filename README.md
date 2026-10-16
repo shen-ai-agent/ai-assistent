@@ -14,7 +14,13 @@ Yêu cầu: Windows, Python 3.11, GPU NVIDIA, ffmpeg.
 py -3.11 -m venv .venv
 .venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
 .venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip uninstall -y onnxruntime
+.venv\Scripts\python -m pip install --force-reinstall --no-deps onnxruntime-gpu==1.23.2
 ```
+
+faster-whisper phụ thuộc `onnxruntime` (bản CPU), gói này ghi đè `onnxruntime-gpu` mà TTS cần. Hai lệnh cuối
+gỡ bản CPU và cài lại bản GPU (VAD của faster-whisper vẫn chạy được trên bản GPU). Chạy lại hai lệnh này sau
+mỗi lần `pip install -r requirements.txt`.
 
 ## Ghi âm bộ test STT
 
@@ -64,7 +70,7 @@ Link "Đề xuất học" ở góc trên trang Nói (số đỏ là số đề x
 Bộ test cá nhân từ các lượt đã sửa (lớn dần theo thời gian dùng; tắt server trước khi chạy benchmark):
 
 ```powershell
-.venv\Scripts\python benchuild_personal_set.py                                  # → _local\personal	ranscripts.jsonl
+.venv\Scripts\python bench\build_personal_set.py   # → _local\personal\transcripts.jsonl
 .venv\Scripts\python bench\stt_bench.py --testset _local\personal --config v3_vi_topic_oracle
 ```
 
@@ -74,3 +80,24 @@ Kiểm tra server bằng audio của bộ test, không cần nói (server phải
 .venv\Scripts\python bench\ws_client.py --limit 20   # chấm như stt_bench, đo thời gian thả phím → text
 .venv\Scripts\python bench\ws_client.py --turns 50   # chạy bền, xem VRAM có tăng dần không
 ```
+
+## Đọc thành tiếng (Phase 3)
+
+Khối **Đọc** trên trang chính: dán text rồi bấm **Đọc** (hoặc `Ctrl+Enter`). Bấm ⏹ hoặc `Esc` để dừng; bắt đầu nói (giữ Space) cũng dừng đọc.
+Danh sách bên dưới hiện từng câu và cách server sẽ đọc nó, câu đang đọc sáng lên.
+
+- Model: ZeroTTS trên GPU, giọng `maichi`. Đổi giọng hoặc tắt TTS trong bảng `[tts]` của `server/config.toml`.
+- Cách đọc thuật ngữ / viết tắt: `data/lexicon.tsv`, server tự đọc lại khi file đổi.
+- Muốn Claude trả lời theo văn nói thì dán `prompts/voice_reply.md` vào Custom instructions của Claude Project.
+- Log server có cảnh báo "ZeroTTS đang chạy CPU…" nghĩa là `onnxruntime-gpu` sai bản: chạy lại hai lệnh cuối ở phần Cài đặt.
+
+Benchmark và đo (tắt server trước khi chạy `tts_bench.py`):
+
+```powershell
+.venv\Scripts\python bench\tts_bench.py --model zerotts --gpu --voice maichi # sinh audio 35 đoạn mẫu, đo TTFA/RTF/VRAM
+.venv\Scripts\python bench\tts_bench.py --compare                 # bảng so sánh các run
+.venv\Scripts\python bench\tts_bench.py --rate-page               # trang chấm mù _local\tts\rate.html
+.venv\Scripts\python bench\tts_ws_client.py                       # server đang chạy: đo tiếng đầu, hụt, dừng, VRAM
+```
+
+Ứng viên khác (VieNeu, OmniVoice) cần venv riêng vì xung đột thư viện; xem đầu `bench/tts_bench.py`.

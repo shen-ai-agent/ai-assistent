@@ -143,32 +143,32 @@ AI-assistent/
 
 ### TODO
 **Chuẩn bị**
-- [ ] Soạn 30 đoạn văn mẫu kiểu câu trả lời của Claude (có thuật ngữ, viết tắt, số, markdown sót)
+- [x] Soạn 30 đoạn văn mẫu kiểu câu trả lời của Claude (có thuật ngữ, viết tắt, số, markdown sót) — 35 đoạn, `bench/tts_samples.txt`
 
 **Normalize**
-- [ ] Bỏ markdown (`**`, `#`, `-`, bảng, link)
-- [ ] Code block: bỏ qua hoặc thay bằng "đoạn code trên màn hình"
-- [ ] Từ điển phát âm cho viết tắt/thuật ngữ: `EC2 → "i xi tu"`, `.NET → "dot net"`, `S3 → "ét ba"`... (thử nghiệm cách đọc nào nghe tự nhiên)
-- [ ] Đọc số, đơn vị, phiên bản (`v3.11`, `12GB`, `99.9%`)
+- [x] Bỏ markdown (`**`, `#`, `-`, bảng, link)
+- [x] Code block: thay bằng "đoạn code trên màn hình"; phần sau dòng `---CODE---` không đọc
+- [x] Từ điển phát âm (`data/lexicon.tsv`) cho viết tắt/thuật ngữ: `EC2 → "i xi tu"`, `.NET → "dot net"`, `S3 → "ét ba"`... (thử nghiệm cách đọc nào nghe tự nhiên)
+- [x] Đọc số, đơn vị, phiên bản (`v3.11`, `12GB`, `99.9%`), ngày giờ, giá mỗi đơn vị
 
 **Synthesis**
-- [ ] Xử lý **câu tiếng Anh hoàn toàn** (ví dụ mẫu IELTS, câu sửa ngữ pháp): model song ngữ, hoặc nhận diện ngôn ngữ từng câu rồi chuyển sang giọng tiếng Anh
-- [ ] Benchmark ít nhất 2–3 model TTS tiếng Việt chạy local (ví dụ các bản fine-tune tiếng Việt của XTTS / F5-TTS, model TTS tiếng Việt mới tại thời điểm làm)
-- [ ] Chấm điểm thủ công 30 đoạn mẫu (1–5): độ tự nhiên, phát âm thuật ngữ, ngắt nghỉ
-- [ ] Sentence splitter: tách câu, gộp câu quá ngắn, cắt câu quá dài
-- [ ] Synthesize theo từng câu, stream chunk về web
-- [ ] Web: audio queue phát tuần tự, **dừng được ngay** khi bấm ⏹
+- [x] Xử lý **câu tiếng Anh hoàn toàn** (ví dụ mẫu IELTS, câu sửa ngữ pháp): model song ngữ, hoặc nhận diện ngôn ngữ từng câu rồi chuyển sang giọng tiếng Anh — nhận diện từng câu (`detect_lang`); ZeroTTS đọc được cả hai, nhóm en 4.6/5
+- [x] Benchmark ít nhất 2–3 model TTS tiếng Việt chạy local (ví dụ các bản fine-tune tiếng Việt của XTTS / F5-TTS, model TTS tiếng Việt mới tại thời điểm làm) — VieNeu, OmniVoice (fine-tune vi), ZeroTTS; `bench/tts_bench.py`
+- [x] Chấm điểm thủ công 30 đoạn mẫu (1–5): độ tự nhiên, phát âm thuật ngữ, ngắt nghỉ
+- [x] Sentence splitter: tách câu, gộp câu quá ngắn, cắt câu quá dài
+- [x] Synthesize theo từng câu, stream chunk về web
+- [x] Web: audio queue phát tuần tự, **dừng được ngay** khi bấm ⏹ (cả Esc, và khi bắt đầu nói)
 
 **Prompt cho Claude**
-- [ ] Viết instruction "trả lời văn nói, không markdown, không code block, ~150 từ" cho Claude Project
+- [x] Viết instruction "trả lời văn nói, không markdown, không code block, ~150 từ" cho Claude Project — `prompts/voice_reply.md`
 
 ### DoD
-- [ ] Có bảng điểm các model TTS trên 30 đoạn mẫu, chọn được 1 model
-- [ ] Điểm trung bình model được chọn ≥ **3.5/5** về phát âm thuật ngữ
-- [ ] Thời gian từ lúc có text đến khi nghe câu đầu tiên ≤ **1.5 giây**
-- [ ] Không có khoảng lặng > 0.5 giây giữa các câu khi đọc đoạn dài
-- [ ] Bấm ⏹ thì dừng trong ≤ **200ms**
-- [ ] STT + TTS cùng load trên GPU, tổng VRAM ≤ **11GB**
+- [x] Có bảng điểm các model TTS trên 30 đoạn mẫu, chọn được 1 model — ZeroTTS GPU, 4.37/5 (T-008)
+- [x] Điểm trung bình model được chọn ≥ **3.5/5** về phát âm thuật ngữ — 4.2 (nhóm term)
+- [x] Thời gian từ lúc có text đến khi nghe câu đầu tiên ≤ **1.5 giây** — p50 81ms, max 342ms (`bench/tts_ws_client.py`)
+- [x] Không có khoảng lặng > 0.5 giây giữa các câu khi đọc đoạn dài — hụt audio max 122ms (ngoài 0.15s nghỉ giữa câu)
+- [x] Bấm ⏹ thì dừng trong ≤ **200ms** — web tắt tiếng ngay (đã nghe thử 16/10/2026); server nhả GPU sau ~290ms
+- [x] STT + TTS cùng load trên GPU, tổng VRAM ≤ **11GB** — đỉnh cả GPU 5.9GB
 
 ---
 
@@ -227,7 +227,7 @@ AI-assistent/
 
 ## Phase 6 — Giọng của chính mình (tuỳ chọn)
 
-**Mục tiêu:** trợ lý đọc bằng giọng của bạn. Dùng chung với dự án narration tiếng Việt.
+**Mục tiêu:** trợ lý đọc bằng giọng của bạn.
 
 ### TODO
 - [ ] Ghi âm dataset giọng: 30–60 phút, câu đa dạng, có thuật ngữ tiếng Anh, phòng yên tĩnh
@@ -240,7 +240,7 @@ AI-assistent/
 - [ ] Điểm phát âm thuật ngữ của giọng clone không thấp hơn giọng mặc định
 - [ ] Độ trễ câu đầu tiên vẫn ≤ **1.5 giây**
 - [ ] Nghe 10 đoạn liên tục không thấy méo tiếng, lạc giọng, hoặc đọc sai ngôn ngữ
-- [ ] Dataset giọng và model nằm trong `voice/` (thư mục riêng trong cùng repo), tái sử dụng được cho dự án narration
+- [ ] Dataset giọng và model nằm trong `voice/` (thư mục riêng trong cùng repo)
 
 ---
 
@@ -274,8 +274,8 @@ AI-assistent/
 |---|---|---|
 | 0 | Setup & dataset | ✅ 15/10/2026 — 100 câu, 8.3 phút, micro Realtek 3.5mm |
 | 1 | Benchmark STT | ✅ 15/10/2026 — large-v3 + prompt theo chủ đề, WER 9.2%, term recall 87%, không fine-tune |
-| 2 | Voice server + Web (STT) | 🟡 TODO xong, chờ thử trên trình duyệt (T-002) |
-| 3 | TTS | ⬜ |
+| 2 | Voice server + Web (STT) | 🟡 TODO xong; DoD trên trình duyệt chưa thực hiện: nói 10 câu, tự kết nối lại, chạy 1 giờ (T-002) |
+| 3 | TTS | ✅ 16/10/2026 — ZeroTTS GPU, giọng maichi, tiếng đầu ~80ms, VRAM 5.9GB (T-008) |
 | 4 | Claude bridge, chạy trọn vòng | ⬜ |
 | 5 | Hoàn thiện trải nghiệm | ⬜ |
 | 6 | Giọng của chính mình | ⬜ |

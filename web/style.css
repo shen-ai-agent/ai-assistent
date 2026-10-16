@@ -66,3 +66,9 @@ button.secondary { background: transparent; color: var(--muted); border: 1px sol
 .fail { color: var(--bad); }
 .better { color: var(--ok); }
 .worse { color: var(--bad); }
+#speak-text { width: 100%; background: var(--panel); color: var(--text); border: 1px solid #333a46;
+  border-radius: 6px; padding: 8px; font: 15px/1.4 system-ui, sans-serif; resize: vertical; }
+.speak-bar { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+#speak-sentences { font-size: 13px; color: var(--muted); padding-left: 24px; }
+#speak-sentences li.now { color: var(--text); }
+#speak-sentences .spoken { display: block; font-size: 11px; }

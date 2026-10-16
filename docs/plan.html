@@ -564,13 +564,19 @@
   {"type": "stop"}                           kết thúc lượt nói
   {"type": "cancel"}                         huỷ lượt hiện tại
   {"type": "correction", "turn_id", "text"}  người dùng sửa tay transcript (ghi log, T-003)
+  {"type": "speak", "text"}                  đọc text (Phase 3); speak mới hoặc start thì dừng lượt đọc cũ
+  {"type": "speak_stop"}                     dừng đọc
 
 Server → Client
   {"type": "hello", "topics": [...], "model": "large-v3", "sample_rate": 16000}
   {"type": "state", "value": "TRANSCRIBING"}
   {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms": 8400, "stt_ms": 1350}
-  {"type": "error", "code": "stt_failed", "message": "..."}</pre>
-  <p style="font-size:14px;color:var(--muted)">Phase 3 và 4 sẽ thêm <code>audio_chunk</code>, <code>response_text</code>, <code>ask</code>. Mọi message định nghĩa ở <code>protocol.py</code>.</p>
+  {"type": "error", "code": "stt_failed", "message": "..."}
+  {"type": "speak_start", "speak_id", "sentences": [{"text", "source", "lang"}]}
+  {"type": "speak_sentence", "speak_id", "index"}      bắt đầu tổng hợp câu index
+  &lt;binary&gt;                                   4 byte speak_id (uint32 LE) + PCM int16 LE, mono, sample rate trong hello.tts
+  {"type": "speak_end", "speak_id", "cancelled", "ttfa_ms", "synth_ms", "audio_ms"}</pre>
+  <p style="font-size:14px;color:var(--muted)">Phase 4 sẽ thêm <code>response_text</code>, <code>ask</code>. Mọi message định nghĩa ở <code>protocol.py</code>.</p>
 
   <h3>TODO</h3>
   <h4>A. Server</h4>
@@ -619,7 +625,7 @@ Server → Client
       <li><b>Chất lượng:</b> đẩy 100 câu testset qua <code>/ws</code> (<code>bench/ws_client.py</code>): WER 9.2%, term recall 87.8%, khớp benchmark (9.2% / 87.2%). Còn chờ nói thật qua trình duyệt.</li>
       <li><b>Độ trễ</b> thả phím → text: p50 552ms, p90 653ms, max 839ms.</li>
       <li><b>VRAM:</b> 220 lượt liên tiếp, 4.30GB → 4.29GB. Còn chờ chạy đủ 1 giờ.</li>
-      <li><b>Chưa kiểm:</b> tự kết nối lại khi tắt/bật server, nói thật qua mic trình duyệt.</li>
+      <li><b>DoD chưa thực hiện</b> (người dùng tự kiểm trên trình duyệt): nói 10 câu testset qua mic, tắt/bật server xem web tự kết nối lại, chạy liên tục 1 giờ / 50 lượt.</li>
       <li>Thêm ngoài kế hoạch: chọn chủ đề trên UI, pre-roll 300ms, <code>Esc</code> để huỷ, log bản sửa tay + <code>bench/suggest_corrections.py</code> (T-003).</li>
       <li><b>Vòng tự học (16/10/2026, T-007):</b> trang <code>/learn.html</code>, API <code>/api/learn</code>, bộ test cá nhân <code>bench/build_personal_set.py</code> + <code>stt_bench.py --testset</code>. Log hiện có: 13 lượt sửa (8 dev, 5 holdout), chưa lỗi nào lặp 2 lần nên chưa có đề xuất.</li>
     </ul>
@@ -713,11 +719,7 @@ Server → Client
   <h4>E. Instruction văn nói cho Claude</h4>
   <ul class="tasks">
     <li><label><input type="checkbox"><span class="t">Viết instruction, đặt vào Claude Project (dùng lại cho <code>claude -p</code> ở Phase 4)</span></label>
-<pre style="white-space:pre-wrap">Câu trả lời của bạn sẽ được đọc thành tiếng cho tôi nghe.
-- Viết như đang nói chuyện, bằng tiếng Việt; giữ thuật ngữ kỹ thuật bằng tiếng Anh.
-- Không dùng markdown, bảng, gạch đầu dòng, emoji hay code block.
-- Tối đa khoảng 150 từ. Nếu chủ đề dài, trả lời ý chính trước rồi hỏi tôi có muốn đi sâu không.
-- Nếu bắt buộc phải có code, nói "tôi để code trên màn hình" và đặt code ở cuối, sau dòng "---CODE---".</pre></li>
+      <div class="hint">Bản dùng thật: <code>prompts/voice_reply.md</code> (thêm: câu tiếng Anh viết thành câu riêng, không đọc URL/đường dẫn).</div></li>
     <li><label><input type="checkbox"><span class="t">Normalize hiểu dấu <code>---CODE---</code>: chỉ đọc phần trước đó</span></label></li>
   </ul>
 
@@ -731,6 +733,19 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">STT + TTS cùng nằm trên GPU, tổng VRAM ≤ <span class="metric">11GB</span></span></label></li>
     <li><label><input type="checkbox"><span class="t">30 pytest normalize pass; 10 đoạn "bẩn" đọc ra không còn ký hiệu nào</span></label></li>
   </ul>
+
+  <h3>Trạng thái (16/10/2026)</h3>
+  <div class="box">
+    <p><b>Xong: đạt DoD</b>, đã nghe thử trên trình duyệt (T-008). Web có khối <b>Đọc</b>: dán text, <code>Ctrl+Enter</code>, ⏹ hoặc <code>Esc</code> để dừng.</p>
+    <ul>
+      <li><b>Model:</b> chọn <b>ZeroTTS</b> (MIT, ONNX trên GPU, giọng <code>maichi</code>). Chấm mù 35 đoạn: OmniVoice 4.43 (không stream được, ~0.9s mới có tiếng), ZeroTTS 4.37, VieNeu 4.11. Phát âm thuật ngữ 4.2/5, câu tiếng Anh 4.6/5 (cùng một giọng, không cần giọng tiếng Anh riêng).</li>
+      <li><b>Normalize</b> có tác dụng: cùng VieNeu, nhóm "bẩn" từ 3.5 (text thô) lên 4.1. 76 pytest.</li>
+      <li><b>Đo qua <code>/ws</code></b> (<code>bench/tts_ws_client.py</code>, 35 đoạn): tiếng đầu p50 81ms, max 342ms; hụt audio giữa các mẩu max 122ms; RTF 0.53; VRAM đỉnh cả GPU 5.9GB khi STT + TTS cùng nằm trong server.</li>
+      <li><b>Dừng:</b> web tắt tiếng ngay khi bấm (dừng mọi source, bỏ frame của lượt cũ). Server chờ mẩu đang tổng hợp xong mới nhả GPU, ~290ms. Đã nghe thử: tắt tiếng ngay.</li>
+      <li><b>Chưa kiểm trên trình duyệt:</b> giữ Space khi đang đọc thì dừng đọc (server có test).</li>
+      <li><b>Cài đặt:</b> faster-whisper kéo <code>onnxruntime</code> bản CPU ghi đè <code>onnxruntime-gpu</code>; bản 1.31 cần CUDA 13 và lặng lẽ chạy CPU. Dùng 1.23.2 (README).</li>
+    </ul>
+  </div>
 
   <h3>Rủi ro</h3>
   <table>
@@ -872,13 +887,12 @@ Server → Client
       <div class="chips">
         <span class="chip">⏱ <b>4–8 buổi</b></span>
         <span class="chip">Phụ thuộc: <b>Phase 3</b></span>
-        <span class="chip">Dùng chung: <b>dự án narration</b></span>
       </div>
     </div>
     <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
   </div>
 
-  <div class="goal">Trợ lý đọc bằng <b>giọng của bạn</b>, chất lượng không kém giọng mặc định. Dataset và model tái sử dụng được cho narration.</div>
+  <div class="goal">Trợ lý đọc bằng <b>giọng của bạn</b>, chất lượng không kém giọng mặc định.</div>
 
   <h3>TODO</h3>
   <h4>A. Zero-shot trước</h4>
@@ -901,7 +915,7 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Điểm phát âm thuật ngữ của giọng clone ≥ giọng mặc định</span></label></li>
     <li><label><input type="checkbox"><span class="t">Nghe câu đầu vẫn ≤ <span class="metric">1.5 giây</span></span></label></li>
     <li><label><input type="checkbox"><span class="t">Nghe <span class="metric">10</span> đoạn liên tục: không méo tiếng, không lạc giọng, không đọc sai ngôn ngữ</span></label></li>
-    <li><label><input type="checkbox"><span class="t">Dataset + model nằm trong <code>voice/</code>, có README về cách dùng lại cho narration</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Dataset + model nằm trong <code>voice/</code>, có README về cách dùng</span></label></li>
   </ul>
 </section>
 

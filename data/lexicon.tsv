@@ -1,0 +1,119 @@
+# Cách đọc thuật ngữ cho TTS. Mỗi dòng: <thuật ngữ>	<cách đọc>
+# Khớp không phân biệt hoa thường, cụm dài khớp trước. Chạy trước bước đọc số ("EC2" không thành "E C hai").
+# Dòng bắt đầu bằng ~ là phiên âm từ tiếng Anh, chỉ dùng khi model TTS đọc từ tiếng Anh dở
+# (normalize(..., loanwords=True)). Viết tắt không có trong file thì đọc từng chữ cái.
+
+# ---------- AWS ----------
+AWS	ây đắp bờ liu ét
+EC2	i xi tu
+S3	ét ba
+VPC	vi pi xi
+NAT Gateway	nát gết uây
+RDS	a đi ét
+IAM	ai ây em
+API Gateway	ây pi ai gết uây
+SQS	ét kiu ét
+SNS	ét en ét
+ECS	i xi ét
+EKS	i kây ét
+ECR	i xi a
+ACM	ây xi em
+Route 53	rao năm mươi ba
+X-Ray	ích rây
+ALB	ây eo bi
+NLB	en eo bi
+Multi-AZ	mun ti ây dét
+AZ	ây dét
+DynamoDB	đai na mô đi bi
+~Lambda	lam đa
+~Cognito	cốc ni tô
+~CloudFront	clao phờ ron
+~CloudWatch	clao uốt
+~CloudFormation	clao pho mây sần
+~EventBridge	i ven brít
+~Fargate	pha gết
+~Terraform	te ra phom
+~Gateway	gết uây
+~subnet	sáp nét
+
+# ---------- .NET / C# ----------
+ASP.NET Core	ây ét pi đót nét co
+ASP.NET	ây ét pi đót nét
+.NET	đót nét
+C#	xi sáp
+F#	ép sáp
+EF Core	i ép co
+LINQ	linh
+IQueryable	ai quy ri ơ bồ
+IEnumerable	ai i niu mơ rơ bồ
+IHttpClientFactory	ai ếch ti ti pi clai ần phác tơ ri
+HttpClient	ếch ti ti pi clai ần
+SignalR	xích nồ a
+~async	ây sinh
+~await	ơ quết
+~middleware	mít đồ que
+~singleton	xinh gồ tần
+
+# ---------- Dev chung ----------
+CI/CD	xi ai xi đi
+GitHub	ghít háp
+REST API	rét ây pi ai
+GraphQL	gráp kiu eo
+OAuth2	ô ót tu
+OAuth	ô ót
+JWT	giây đắp bờ liu ti
+PKCE	pi kây xi i
+CORS	co
+SQL Server	ét kiu eo sơ vơ
+PostgreSQL	pốt gờ rét
+MySQL	mai ét kiu eo
+SQL	ét kiu eo
+NoSQL	nô ét kiu eo
+RabbitMQ	ráp bít em kiu
+CQRS	xi kiu a ét
+TTL	ti ti eo
+HTTPS	ếch ti ti pi ét
+HTTP	ếch ti ti pi
+WebSocket	quép sóc kịt
+JSON	giây sơn
+YAML	da mồ
+HTML	ếch ti em eo
+CSS	xi ét ét
+URL	iu a eo
+UI	iu ai
+SDK	ét đi kây
+CLI	xi eo ai
+GPU	gi pi iu
+CPU	xi pi iu
+VRAM	vi ram
+RAM	ram
+DNS	đi en ét
+TCP	ti xi pi
+UDP	iu đi pi
+SSH	ét ét ếch
+IPv4	ai pi vi bốn
+IPv6	ai pi vi sáu
+IP	ai pi
+npm	en pi em
+LLM	eo eo em
+AI	ây ai
+STT	ét ti ti
+TTS	ti ti ét
+CUDA	cu đa
+VS Code	vi ét code
+Node.js	nốt giây ét
+~Docker	đốc cơ
+~Kubernetes	cu bơ nê tịt
+~Redis	rê đít
+~Python	pai thon
+~JavaScript	gia va sờ críp
+~TypeScript	tai pờ sờ críp
+~React	ri ác
+~Git	ghít
+
+# ---------- Tiếng Anh ----------
+IELTS	ai eo
+TOEIC	tô ích
+~band score	ben sco
+~collocation	co lô kê sần
+~phrasal verb	phrây dồ vớp

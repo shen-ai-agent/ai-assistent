@@ -5,12 +5,13 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 | ID | Tiêu đề | Phase | Trạng thái |
 |---|---|---|---|
 | T-001 | Chốt DoD Phase 1 | 1 | ✅ 15/10/2026 |
-| T-002 | Voice server + web push-to-talk, có chọn chủ đề | 2 | 🟡 đang làm |
+| T-002 | Voice server + web push-to-talk, có chọn chủ đề | 2 | 🟡 code xong, DoD trên trình duyệt chưa thực hiện |
 | T-003 | Log lượt nhận dạng + text sửa tay, làm nguồn cho corrections | 2 | ✅ 15/10/2026 |
 | T-004 | Ghi thêm câu test mix/dense | 1 (bổ sung) | ⬜ tuỳ chọn |
 | T-005 | Nhận xét phát âm tiếng Anh dựa trên chỗ STT nghe sai | 5 | ⬜ |
-| T-006 | Quyết định: dự án narration có gộp vào repo này không | — | 🔴 chờ quyết định |
+| T-006 | Quyết định: dự án narration có gộp vào repo này không | — | ✅ 16/10/2026: không |
 | T-007 | Vòng tự học có kiểm soát từ bản sửa tay | 2 → 5 | ✅ 16/10/2026 (công cụ); dữ liệu tích luỹ khi dùng |
+| T-008 | TTS: chọn model, chuẩn hoá text, stream về web | 3 | ✅ 16/10/2026 |
 
 ---
 
@@ -35,6 +36,8 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 - Chưa chọn chủ đề thì dùng two_pass: nhận dạng một lần, `detect_topic`, rồi nhận dạng lại.
 
 **Xong khi.** Đạt DoD Phase 2 trong PLAN.md.
+
+**Trạng thái (16/10/2026).** Code và đo qua `bench/ws_client.py` xong. Chưa thực hiện trên trình duyệt: nói 10 câu testset qua mic, tắt/bật server xem web tự kết nối lại, chạy liên tục 1 giờ / 50 lượt.
 
 ## T-003: Log lượt nhận dạng + text sửa tay
 
@@ -66,7 +69,9 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 
 ## T-006: Dự án narration có gộp vào repo này không
 
-**Bối cảnh.** Câu hỏi mở từ lúc lập kế hoạch, chưa có quyết định.
+**Bối cảnh.** Kế hoạch ban đầu giả định có một dự án narration tiếng Việt bằng giọng người dùng, dùng chung dataset giọng của Phase 6.
+
+**Kết quả (16/10/2026).** Không có dự án đó, không gộp. Phase 6 chỉ phục vụ trợ lý này; đã bỏ các chỗ nhắc narration trong PLAN.md và plan.html.
 
 ## T-007: Vòng tự học có kiểm soát từ bản sửa tay
 
@@ -90,3 +95,22 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 - Trên log hiện có (25 lượt, 13 lượt sửa: 8 dev, 5 holdout): chưa có đề xuất, mỗi lỗi mới gặp 1 lần. Ứng viên: `Roboto → Proposal`, `GFDT → JWT`, `interface → integrate`, thuật ngữ `Proposal`, `integrate`.
 
 **Còn lại.** Tích luỹ khi dùng thật. Fine-tune LoRA vẫn ở Phase 5, chỉ làm khi bộ test cá nhân đủ lớn và glossary/rule không còn cải thiện được.
+
+## T-008: TTS: chọn model, chuẩn hoá text, stream về web
+
+**Bối cảnh.** Xem Phase 3 trong PLAN.md. Câu trả lời của Claude có thuật ngữ, viết tắt, số, markdown sót và cả câu tiếng Anh, nên phải chuẩn hoá trước khi đọc. Model phải stream được để nghe câu đầu sớm.
+
+**Kết quả (16/10/2026).**
+- `server/tts/normalize.py` + `splitter.py`: bỏ code/markdown/URL, cắt phần sau `---CODE---`, đọc số/đơn vị/phiên bản/ngày giờ, từ điển phát âm `data/lexicon.tsv`, tách câu và nhận diện câu tiếng Anh. 76 test trong `tests/test_tts_normalize.py`.
+- `bench/tts_bench.py` + `bench/tts_samples.txt` (35 đoạn: clean/term/dirty/en): so 3 model, chấm mù 1–5 ở `_local/tts/rate.html`. Mỗi ứng viên một venv riêng ở `_local/venvs/`.
+- Chọn **ZeroTTS** (MIT, ONNX trên GPU, giọng `maichi`): điểm nghe 4.37 (OmniVoice 4.43 nhưng không stream được, VieNeu 4.11); phát âm thuật ngữ 4.2. Chi tiết trong `_local/tts_report.md`.
+- `server/tts/synth.py`, message `speak` / `speak_stop` trong `server/protocol.py`; audio gửi dạng binary (4 byte speak_id + PCM int16 48kHz). Bắt đầu nói (start) thì server tự dừng đọc.
+- Web: khối "Đọc" (dán text, Ctrl+Enter), phát nối tiếp theo lịch, ⏹ / Esc tắt tiếng ngay, tô câu đang đọc, hiện số đo.
+- `prompts/voice_reply.md`: instruction văn nói cho Claude Project.
+- Đo qua WebSocket (`bench/tts_ws_client.py`, 35 đoạn, STT và TTS cùng nằm trong server): tiếng đầu p50 81ms / max 342ms, hụt audio giữa các mẩu max 122ms, RTF 0.53, VRAM đỉnh cả GPU 5.9GB.
+
+**Lưu ý cài đặt.** faster-whisper kéo `onnxruntime` bản CPU, ghi đè `onnxruntime-gpu`; onnxruntime-gpu 1.31 cần CUDA 13 và lặng lẽ chạy CPU. Dùng 1.23.2 (README). Server ghi cảnh báo nếu ZeroTTS không chạy CUDA.
+
+**Nghe thử (16/10/2026).** Người dùng thấy đọc ổn; bấm ⏹ tắt tiếng ngay. Phase 3 ✅.
+
+**Còn lại.** Chưa kiểm trên trình duyệt: giữ Space khi đang đọc thì dừng đọc và nhận dạng bình thường (có test `test_start_interrupts_speaking` phía server).
