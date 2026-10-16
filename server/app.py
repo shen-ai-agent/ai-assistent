@@ -1,7 +1,7 @@
-"""Voice server: WebSocket nhận audio push-to-talk, trả transcript; nhận text, stream giọng đọc.
+"""Voice server: WebSocket nhận audio push-to-talk, trả transcript; hỏi Claude qua bridge; stream giọng đọc.
 Phục vụ luôn web/ tĩnh.
 
-Mỗi kết nối là một phiên: start → frame PCM → stop → transcript; speak → audio từng câu → speak_end.
+Mỗi kết nối là một phiên: start → frame PCM → stop → transcript → (bridge) answer_* → audio từng câu → speak_end.
 STT dùng chung một khoá GPU, TTS một khoá riêng: nhiều tab cùng nói thì xếp hàng, nhưng đang đọc
 vẫn nhận dạng được (người dùng nói chen ngang).
 """
@@ -12,14 +12,16 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import asynccontextmanager
-from typing import Callable
+from contextlib import aclosing, asynccontextmanager
+from typing import AsyncIterator, Callable
 
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
 from . import protocol as P
+from .bridge import Bridge, BridgeError, Done, SentenceFeeder, TextDelta, make_bridge
+from .bridge.asklog import AskLogger
 from .config import ROOT, Config, load_config
 from .learn_api import router as learn_router
 from .protocol import ErrorCode, State
@@ -41,8 +43,14 @@ def _zerotts_engine(cfg: Config):
     return ZeroTtsEngine(cfg.tts_voice, cfg.tts_device, cfg.tts_threads)
 
 
+async def _preset_answer(text: str) -> AsyncIterator[TextDelta | Done]:
+    yield TextDelta(text)
+    yield Done()
+
+
 def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], object] = _whisper_engine,
-               tts_factory: Callable[[Config], object] = _zerotts_engine) -> FastAPI:
+               tts_factory: Callable[[Config], object] = _zerotts_engine,
+               bridge_factory: Callable[[Config], Bridge | None] = make_bridge) -> FastAPI:
     cfg = cfg or load_config()
 
     @asynccontextmanager
@@ -66,15 +74,28 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
             # Warm-up: lần chạy đầu của onnxruntime CUDA chậm (cấp phát, chọn kernel)
             await asyncio.to_thread(lambda: [c for seg in tts.plan("Xin chào bạn.") for c in tts.stream(seg)])
             app.state.tts = tts
+        app.state.sessions = []  # kết nối đang mở, mới nhất ở cuối
+        app.state.asklog = AskLogger(cfg.bridge_log_dir)
+        app.state.bridge = bridge = bridge_factory(cfg)
+        if bridge is not None:
+            log.info("Bridge: %s", bridge.name)
+            if hasattr(bridge, "start"):
+                bridge.start()
+                # Hotkey khi không có lượt nào chờ (câu hỏi gõ thẳng trong Claude): đọc ở tab mới nhất
+                bridge.on_orphan = lambda text: app.state.sessions and app.state.sessions[-1].start_ask(
+                    "(clipboard)", _preset_answer(text))
         log.info("Sẵn sàng: http://%s:%d", cfg.host, cfg.port)
         yield
+        if bridge is not None and hasattr(bridge, "stop"):
+            bridge.stop()
 
     app = FastAPI(title="Voice Study Assistant", lifespan=lifespan)
 
     @app.get("/health")
     async def health():
+        bridge = app.state.bridge
         return {"status": "ok", "model": cfg.model, "topics": app.state.stt.topics(),
-                "tts": app.state.tts is not None}
+                "tts": app.state.tts is not None, "bridge": bridge.name if bridge else None}
 
     app.include_router(learn_router)
 
@@ -92,7 +113,7 @@ class Session:
     """Một kết nối WebSocket. Vòng nhận message không bị chặn khi đang nhận dạng, để còn nhận cancel."""
 
     def __init__(self, ws: WebSocket, app: FastAPI, cfg: Config):
-        self.ws, self.cfg = ws, cfg
+        self.ws, self.cfg, self.app = ws, cfg, app
         self.stt: SttService = app.state.stt
         self.gpu_lock: asyncio.Lock = app.state.gpu_lock
         self.turnlog: TurnLogger = app.state.turnlog
@@ -105,11 +126,19 @@ class Session:
         self.tts_lock: asyncio.Lock = app.state.tts_lock
         self.speak_task: asyncio.Task | None = None
         self.speak_id = 0
+        self.bridge: Bridge | None = app.state.bridge
+        self.asklog: AskLogger = app.state.asklog
+        self.ask_task: asyncio.Task | None = None
+        self.ask_id = 0
 
     async def run(self):
         tts = {"sample_rate": self.tts.sample_rate, "voice": self.cfg.tts_voice} if self.tts else None
-        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts))
+        bridge = self.bridge and {"kind": self.bridge.name, "auto_ask": self.cfg.bridge_auto_ask,
+                                  "session_id": self.bridge.session_id, "model": getattr(self.bridge, "model", None),
+                                  "models": self.cfg.bridge_models if hasattr(self.bridge, "model") else []}
+        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge))
         await self.set_state(State.IDLE)
+        self.app.state.sessions.append(self)
         try:
             while True:
                 msg = await self.ws.receive()
@@ -122,8 +151,10 @@ class Session:
         except WebSocketDisconnect:
             pass
         finally:
+            self.app.state.sessions.remove(self)
             if self.task:
                 self.task.cancel()
+            self.stop_asking()
             self.stop_speaking()
 
     def on_audio(self, data: bytes):
@@ -146,7 +177,8 @@ class Session:
             if topic is not None and topic not in self.stt.topics():
                 return await self.send(P.error(ErrorCode.BAD_TOPIC, f"Không có chủ đề {topic!r}"))
             self.cancel_task()
-            self.stop_speaking()  # nói chen ngang thì dừng đọc
+            self.stop_asking()  # nói chen ngang thì dừng hỏi và dừng đọc
+            self.stop_speaking()
             self.chunks, self.n_bytes, self.topic = [], 0, topic
             await self.set_state(State.LISTENING)
         elif kind == "stop":
@@ -166,11 +198,35 @@ class Session:
                 return await self.send(P.error(ErrorCode.BAD_MESSAGE, "speak cần text"))
             if self.tts is None:
                 return await self.send(P.error(ErrorCode.TTS_DISABLED, "Server đang tắt TTS"))
-            self.stop_speaking()
-            self.speak_id += 1
-            self.speak_task = asyncio.create_task(self.speak(self.speak_id, text))
+            queue = self.begin_speaking()[1]
+            queue.put_nowait(text)
+            queue.put_nowait(None)
         elif kind == "speak_stop":
             self.stop_speaking()
+        elif kind == "ask":
+            text = msg.get("text")
+            if not isinstance(text, str) or not text.strip():
+                return await self.send(P.error(ErrorCode.BAD_MESSAGE, "ask cần text"))
+            if self.bridge is None:
+                return await self.send(P.error(ErrorCode.BRIDGE_DISABLED, "Server chưa bật bridge tới Claude"))
+            self.start_ask(text)
+        elif kind == "ask_stop":
+            self.stop_asking()
+            self.stop_speaking()
+        elif kind == "new_session":
+            if self.bridge is not None:
+                self.stop_asking()
+                self.bridge.new_session()
+                await self.send(P.bridge_session(self.bridge.session_id))
+        elif kind == "set_model":
+            model = msg.get("model")
+            if self.bridge is None or not hasattr(self.bridge, "model"):
+                return await self.send(P.error(ErrorCode.BRIDGE_DISABLED, "Bridge này không chọn được model"))
+            if model != "" and model not in self.cfg.bridge_models:
+                return await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Model {model!r} không có trong [bridge] models"))
+            self.bridge.model = model  # bridge dùng chung nên đổi cho mọi tab, lượt đang chạy giữ model cũ
+            for s in list(self.app.state.sessions):
+                await s.send(P.bridge_model(model))
         else:
             await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Không biết message {kind!r}"))
 
@@ -211,37 +267,107 @@ class Session:
         self.turnlog.turn(turn_id, audio, topic=res.topic, topic_auto=res.topic_auto,
                           audio_ms=audio_ms, stt_ms=res.stt_ms, raw=res.raw, text=res.text)
         await self.send(P.transcript(turn_id, res.text, res.topic, res.topic_auto, audio_ms, res.stt_ms))
-        await self.set_state(State.IDLE)
+        if self.bridge is not None and self.cfg.bridge_auto_ask and res.text.strip():
+            self.start_ask(res.text)
+        else:
+            await self.set_state(State.IDLE)
 
-    async def speak(self, speak_id: int, text: str):
+    def start_ask(self, question: str, stream: AsyncIterator[TextDelta | Done] | None = None):
+        """Hỏi Claude (thay lượt đang chạy). stream có sẵn = câu trả lời đã có (hotkey clipboard)."""
+        self.stop_asking()
+        self.ask_id += 1
+        self.ask_task = asyncio.create_task(self.answer(self.ask_id, question, stream or self.bridge.ask(question)))
+
+    async def answer(self, ask_id: int, question: str, stream: AsyncIterator[TextDelta | Done]):
+        """Chuyển text Claude về web và cắt dần thành câu cho TTS, để câu đầu được đọc khi Claude còn đang viết."""
+        t0 = time.perf_counter()
+        speak_id, queue = self.begin_speaking() if self.tts else (None, None)
+        await self.send(P.answer_start(ask_id, question, speak_id))
+        await self.set_state(State.WAITING_CLAUDE)
+        feeder = SentenceFeeder()
+        parts: list[str] = []
+        first_ms = error = done = None
+        cancelled = False
+        try:
+            async with aclosing(stream) as events:  # đóng generator ngay = bridge kill tiến trình claude
+                async for ev in events:
+                    if isinstance(ev, Done):
+                        done = ev
+                        continue
+                    if first_ms is None:
+                        first_ms = round((time.perf_counter() - t0) * 1000)
+                    parts.append(ev.text)
+                    await self.send(P.answer_delta(ask_id, ev.text))
+                    if queue:
+                        for chunk in feeder.push(ev.text):
+                            queue.put_nowait(chunk)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception as e:
+            if not isinstance(e, BridgeError):
+                log.exception("Bridge lỗi")
+            error = str(e) or type(e).__name__
+            await self.send(P.error(ErrorCode.BRIDGE_FAILED, error))
+        if queue:
+            if not cancelled:
+                for chunk in feeder.flush():
+                    queue.put_nowait(chunk)
+                if error:
+                    queue.put_nowait("Không hỏi được Claude, xem lỗi trên màn hình.")
+            queue.put_nowait(None)
+        total_ms = round((time.perf_counter() - t0) * 1000)
+        session_id = done.session_id if done else self.bridge and self.bridge.session_id
+        cost = done.cost_usd if done else None
+        model = done.model if done else None
+        await self.send(P.answer_end(ask_id, cancelled, error, session_id, first_ms, total_ms, cost, model))
+        self.asklog.write(bridge=self.bridge and self.bridge.name, session_id=session_id, question=question,
+                          answer="".join(parts), first_text_ms=first_ms, total_ms=total_ms, cost_usd=cost,
+                          model=model, error=error, cancelled=cancelled)
+        if self.state is State.WAITING_CLAUDE:
+            await self.set_state(State.IDLE)
+
+    def begin_speaking(self) -> tuple[int, asyncio.Queue]:
+        """Mở lượt đọc mới (thay lượt cũ). Đưa text vào queue dần, None = hết."""
+        self.stop_speaking()
+        self.speak_id += 1
+        queue: asyncio.Queue = asyncio.Queue()
+        self.speak_task = asyncio.create_task(self.speak(self.speak_id, queue))
+        return self.speak_id, queue
+
+    async def speak(self, speak_id: int, queue: asyncio.Queue):
         """Đọc từng câu, gửi từng mẩu audio ngay khi có. Bị huỷ (speak_stop, speak mới) thì speak_end cancelled."""
         t0 = time.perf_counter()
-        ttfa_ms, n_samples, cancelled = None, 0, False
+        ttfa_ms, n_samples, cancelled, index = None, 0, False, 0
+        await self.send(P.speak_start(speak_id))
         try:
-            segs = await asyncio.to_thread(self.tts.plan, text)
-            await self.send(P.speak_start(speak_id, [{"text": s.text, "source": s.source, "lang": s.lang}
-                                                     for s in segs]))
-            async with self.tts_lock:
-                for i, seg in enumerate(segs):
-                    await self.send(P.speak_sentence(speak_id, i))
-                    it = self.tts.stream(seg)
-                    try:
-                        while True:
-                            job = asyncio.ensure_future(asyncio.to_thread(next, it, None))
-                            try:
-                                chunk = await asyncio.shield(job)
-                            except asyncio.CancelledError:
-                                # Mẩu đang tổng hợp không dừng giữa chừng được: chờ xong rồi mới nhả khoá
-                                await asyncio.wait([job])
-                                raise
-                            if chunk is None:
-                                break
-                            if ttfa_ms is None:
-                                ttfa_ms = round((time.perf_counter() - t0) * 1000)
-                            n_samples += len(chunk)
-                            await self.send_bytes(P.audio_frame(speak_id, to_pcm16(chunk)))
-                    finally:
-                        it.close()
+            while (text := await queue.get()) is not None:
+                segs = await asyncio.to_thread(self.tts.plan, text)
+                if not segs:
+                    continue
+                await self.send(P.speak_more(speak_id, [{"text": s.text, "source": s.source, "lang": s.lang}
+                                                        for s in segs]))
+                for seg in segs:
+                    async with self.tts_lock:  # khoá theo câu: tab khác chen được giữa hai câu
+                        await self.send(P.speak_sentence(speak_id, index))
+                        index += 1
+                        it = self.tts.stream(seg)
+                        try:
+                            while True:
+                                job = asyncio.ensure_future(asyncio.to_thread(next, it, None))
+                                try:
+                                    chunk = await asyncio.shield(job)
+                                except asyncio.CancelledError:
+                                    # Mẩu đang tổng hợp không dừng giữa chừng được: chờ xong rồi mới nhả khoá
+                                    await asyncio.wait([job])
+                                    raise
+                                if chunk is None:
+                                    break
+                                if ttfa_ms is None:
+                                    ttfa_ms = round((time.perf_counter() - t0) * 1000)
+                                n_samples += len(chunk)
+                                await self.send_bytes(P.audio_frame(speak_id, to_pcm16(chunk)))
+                        finally:
+                            it.close()
         except asyncio.CancelledError:
             cancelled = True
         except Exception as e:
@@ -250,6 +376,11 @@ class Session:
             cancelled = True
         await self.send(P.speak_end(speak_id, cancelled, ttfa_ms, round((time.perf_counter() - t0) * 1000),
                                     round(n_samples * 1000 / self.tts.sample_rate)))
+
+    def stop_asking(self):
+        if self.ask_task and not self.ask_task.done():
+            self.ask_task.cancel()
+        self.ask_task = None
 
     def stop_speaking(self):
         if self.speak_task and not self.speak_task.done():

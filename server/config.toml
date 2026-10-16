@@ -23,6 +23,21 @@ device = "cuda"           # cần onnxruntime-gpu 1.23.2 (xem README); "cpu" th�
 threads = 4
 loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
 
+[bridge]
+# claude_cli: gọi `claude -p` (Claude Code, dùng gói subscription đã đăng nhập), giữ ngữ cảnh bằng --resume
+# clipboard: chép transcript vào clipboard; copy câu trả lời từ Claude Desktop/web rồi bấm hotkey để nghe
+# none: chỉ STT + TTS
+kind = "claude_cli"
+auto_ask = true           # nhận dạng xong thì tự hỏi; false = chỉ hỏi khi bấm "Hỏi Claude"
+hotkey = "ctrl+alt+r"     # chỉ dùng cho clipboard
+workdir = "_local/claude-workdir"   # Claude chạy ở đây, không thấy code dự án
+prompt = "prompts/voice_reply.md"
+tools = ["WebSearch", "WebFetch"]
+model = ""                # rỗng = mặc định của Claude Code; đổi được trên web (mất khi restart server)
+models = ["sonnet", "opus", "haiku"]   # alias của claude --model, hiện trong ô chọn trên web
+timeout_s = 120
+log_dir = "_local/sessions"
+
 [log]
 dir = "_local/logs"
 save_audio = true         # lưu wav từng lượt để benchmark lại audio đi qua trình duyệt

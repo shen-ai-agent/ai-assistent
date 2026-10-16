@@ -38,17 +38,21 @@
   <section class="talk">
     <button id="talk" disabled>Giữ để nói</button>
     <div class="meter"><div id="level"></div></div>
-    <p class="hint">Giữ <kbd>Space</kbd> hoặc giữ nút. <kbd>Esc</kbd> để huỷ.</p>
+    <p class="hint">Giữ <kbd>Space</kbd> hoặc giữ nút. <kbd>Esc</kbd> để huỷ, hoặc dừng Claude đang trả lời / đang đọc.</p>
+    <p id="bridge-status" class="hint"></p>
     <p id="error" class="error" hidden></p>
   </section>
 
   <section class="speak">
-    <h2>Đọc</h2>
+    <h2>Gõ</h2>
     <textarea id="speak-text" rows="3" spellcheck="false"
-      placeholder="Dán đoạn trả lời vào đây rồi bấm Đọc (Ctrl+Enter)."></textarea>
+      placeholder="Gõ câu hỏi rồi bấm Hỏi Claude (Ctrl+Enter), hoặc dán đoạn văn rồi bấm Đọc."></textarea>
     <div class="speak-bar">
-      <button id="speak" disabled>Đọc</button>
+      <button id="ask" disabled>Hỏi Claude</button>
+      <button id="speak" class="secondary" disabled>Đọc</button>
       <button id="speak-stop" class="secondary" disabled>⏹ Dừng</button>
+      <button id="new-session" class="secondary" disabled title="Claude quên ngữ cảnh các câu trước">Session mới</button>
+      <select id="bridge-model" hidden disabled title="Model Claude cho các lượt sau, áp cho mọi tab"></select>
       <span id="speak-status" class="hint"></span>
     </div>
     <ol id="speak-sentences"></ol>
@@ -66,6 +70,11 @@
   <li class="turn">
     <div class="meta"></div>
     <textarea rows="2" spellcheck="false"></textarea>
+    <div class="answer" hidden>
+      <div class="answer-text"></div>
+      <pre class="answer-code" hidden></pre>
+      <div class="answer-meta"></div>
+    </div>
   </li>
 </template>
 

@@ -35,6 +35,7 @@ def speak(ws, text: str, sample_rate: int, stop_after: float | None = None) -> d
     t0 = time.perf_counter()
     ws.send(json.dumps({"type": "speak", "text": text}))
     speak_id = None
+    n_sent = 0
     first = None
     next_time = 0.0       # giờ phát (theo t0) mẩu kế tiếp bắt đầu
     pending_gap = 0.0
@@ -73,7 +74,8 @@ def speak(ws, text: str, sample_rate: int, stop_after: float | None = None) -> d
         msg = json.loads(raw)
         if msg["type"] == "speak_start":
             speak_id = msg["speak_id"]
-            n_sent = len(msg["sentences"])
+        elif msg["type"] == "speak_more" and msg["speak_id"] == speak_id:
+            n_sent += len(msg["sentences"])
         elif msg["type"] == "speak_sentence" and msg["speak_id"] == speak_id and msg["index"] > 0:
             pending_gap = SENTENCE_GAP_S
         elif msg["type"] == "speak_end" and msg["speak_id"] == speak_id:

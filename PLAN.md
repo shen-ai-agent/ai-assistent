@@ -178,27 +178,29 @@ AI-assistent/
 
 ### TODO
 **4a — Clipboard bridge (làm trước)**
-- [ ] Interface chung `Bridge.ask(text) -> text` (hoặc dạng stream)
-- [ ] STT xong → tự copy transcript vào clipboard → bạn paste vào claude.ai
-- [ ] Hotkey toàn cục (ví dụ `Ctrl+Alt+R`): đọc text đang có trong clipboard → normalize → TTS
-- [ ] State `WAITING_CLAUDE` hiện trên UI trong lúc chờ
+- [x] Interface chung `Bridge.ask(text)` dạng stream (`server/bridge/base.py`): yield `TextDelta`, cuối cùng `Done`
+- [x] STT xong → tự copy transcript vào clipboard → bạn paste vào claude.ai (`[bridge] kind = "clipboard"`)
+- [x] Hotkey toàn cục `Ctrl+Alt+R`: đọc text đang có trong clipboard → normalize → TTS (đã kiểm đăng ký hotkey, đọc/ghi clipboard; chưa bấm thử trọn vòng)
+- [x] State `WAITING_CLAUDE` hiện trên UI trong lúc chờ
 
 **4b — Claude Code headless**
-- [ ] `ClaudeCliBridge`: gọi `claude -p "<text>" --output-format json`, lấy `session_id`
-- [ ] Các lượt sau dùng `--resume <session_id>` để giữ context trong session
-- [ ] System prompt / append prompt cho văn nói (dùng lại từ Phase 3)
-- [ ] Bật WebSearch cho câu hỏi cần research
-- [ ] Stream response (`--output-format stream-json`) → đẩy từng câu sang TTS ngay khi có
-- [ ] Nút "Session mới" trên UI = bỏ `session_id`
-- [ ] Đọc lại điều khoản sử dụng subscription cho cách dùng này
-- [ ] Lưu log session ra file (`_local/sessions/*.jsonl`): câu hỏi, transcript, response, thời gian từng bước
+- [x] `ClaudeCliBridge`: gọi `claude -p "<text>" --output-format stream-json`, lấy `session_id`. Chạy trong `_local/claude-workdir`, chỉ cho WebSearch/WebFetch, tắt CLAUDE.md/git/memory của repo qua `--settings`
+- [x] Các lượt sau dùng `--resume <session_id> --fork-session` để giữ context; lượt bị ngắt hoặc lỗi không thành context của lượt sau
+- [x] Append prompt cho văn nói (`prompts/voice_reply.md`, `--append-system-prompt`)
+- [x] Bật WebSearch cho câu hỏi cần research
+- [x] Stream response → cắt câu dần (`server/bridge/feeder.py`) → đẩy từng câu sang TTS ngay khi có
+- [x] Nút "Session mới" trên UI = bỏ `session_id`
+- [ ] Đọc lại điều khoản sử dụng subscription cho cách dùng này (người dùng tự đọc)
+- [x] Lưu log session ra file (`_local/sessions/*.jsonl`): câu hỏi, response, session_id, thời gian text đầu / trả lời xong, chi phí, lỗi
+- [x] Dừng giữa chừng (Esc / ⏹ / bắt đầu nói) thì kill tiến trình `claude`: answer_end sau ~25ms, không sót tiến trình
+- [x] Ô gõ tay: "Hỏi Claude" (Ctrl+Enter) hoặc "Đọc"; phần sau `---CODE---` hiện trong khung code, không đọc
 
 ### DoD
-- [ ] **4a:** Một lượt hỏi–đáp hoàn chỉnh chỉ cần: giữ Space nói → paste → bấm hotkey
-- [ ] **4b:** Một lượt hỏi–đáp hoàn chỉnh không cần chạm chuột/bàn phím ngoài push-to-talk
-- [ ] **4b:** Câu hỏi thứ 3 trong session tham chiếu được câu thứ 1 ("cái đó khác gì cái lúc nãy?")
-- [ ] **4b:** Thời gian từ thả phím đến nghe câu đầu tiên ≤ **8 giây** với câu hỏi không cần research
-- [ ] Đổi bridge (clipboard ↔ CLI) chỉ cần đổi config, không sửa code STT/TTS
+- [ ] **4a:** Một lượt hỏi–đáp hoàn chỉnh chỉ cần: giữ Space nói → paste → bấm hotkey (chưa thử trên trình duyệt)
+- [x] **4b:** Một lượt hỏi–đáp hoàn chỉnh không cần chạm chuột/bàn phím ngoài push-to-talk (`auto_ask = true`; đo qua `bench/claude_ws_client.py`)
+- [x] **4b:** Câu hỏi thứ 3 trong session tham chiếu được câu thứ 1 — "dịch vụ đầu tiên mình hỏi" → trả lời về EC2
+- [x] **4b:** Thời gian từ thả phím đến nghe câu đầu tiên ≤ **8 giây** — p50 4.4s, max 4.6s (5 câu, 16/10/2026; Claude text đầu 3–4s, STT ~1s)
+- [x] Đổi bridge (clipboard ↔ CLI) chỉ cần đổi `[bridge] kind` trong `server/config.toml`, không sửa code STT/TTS
 - [ ] **Dùng thật 3 buổi tối học liên tiếp**, ghi lại các điểm khó chịu vào `_local/feedback.md`
 
 ---
@@ -276,7 +278,7 @@ AI-assistent/
 | 1 | Benchmark STT | ✅ 15/10/2026 — large-v3 + prompt theo chủ đề, WER 9.2%, term recall 87%, không fine-tune |
 | 2 | Voice server + Web (STT) | 🟡 TODO xong; DoD trên trình duyệt chưa thực hiện: nói 10 câu, tự kết nối lại, chạy 1 giờ (T-002) |
 | 3 | TTS | ✅ 16/10/2026 — ZeroTTS GPU, giọng maichi, tiếng đầu ~80ms, VRAM 5.9GB (T-008) |
-| 4 | Claude bridge, chạy trọn vòng | ⬜ |
+| 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
 | 5 | Hoàn thiện trải nghiệm | ⬜ |
 | 6 | Giọng của chính mình | ⬜ |
 | 7 | Dùng từ mọi thiết bị | ⬜ |

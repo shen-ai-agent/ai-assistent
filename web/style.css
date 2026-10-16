@@ -38,6 +38,11 @@ kbd { background: #262a33; border-radius: 4px; padding: 1px 5px; font-size: 11px
 .turn textarea { width: 100%; background: var(--panel); color: var(--text); border: 1px solid #333a46;
   border-radius: 6px; padding: 8px; font: 15px/1.4 system-ui, sans-serif; resize: vertical; }
 .turn textarea.edited { border-color: var(--ok); }
+.turn .answer { margin-top: 6px; padding: 8px 12px; border-left: 3px solid var(--accent); background: #141821; }
+.turn .answer-text { white-space: pre-wrap; line-height: 1.5; }
+.turn .answer-code { background: #0b0d11; border: 1px solid #262a33; border-radius: 6px; padding: 8px;
+  overflow-x: auto; font-size: 13px; }
+.turn .answer-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
 a { color: var(--accent); }
 .nav { font-size: 13px; text-decoration: none; margin-right: 8px; }
 .badge { background: var(--rec); color: white; border-radius: 9px; padding: 0 6px; font-size: 11px; }

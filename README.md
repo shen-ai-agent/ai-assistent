@@ -101,3 +101,25 @@ Benchmark và đo (tắt server trước khi chạy `tts_bench.py`):
 ```
 
 Ứng viên khác (VieNeu, OmniVoice) cần venv riêng vì xung đột thư viện; xem đầu `bench/tts_bench.py`.
+
+## Hỏi Claude (Phase 4)
+
+Giữ Space nói câu hỏi, thả ra: server nhận dạng, hỏi Claude, rồi đọc câu trả lời ngay khi câu đầu tiên về (không chờ trả lời xong).
+Câu trả lời hiện dưới lượt nói; phần code (sau `---CODE---`) chỉ hiện, không đọc. Gõ câu hỏi trong khối **Gõ** rồi bấm **Hỏi Claude** (`Ctrl+Enter`) cũng được.
+
+- `Esc` / ⏹ / bắt đầu nói: dừng cả hỏi lẫn đọc.
+- Ô chọn model cạnh **Session mới** (`claude_cli`): đổi cho các lượt sau, áp cho mọi tab, về lại `model` trong config khi restart server. "model mặc định" là model mặc định của Claude Code theo gói đăng nhập. Danh sách lấy từ `models` trong `[bridge]`; tên model thật hiện ở dòng số đo dưới câu trả lời.
+- **Session mới**: Claude quên ngữ cảnh cũ. Session càng dài thì mỗi lượt càng tốn hạn mức, đổi chủ đề thì nên bấm.
+- Cấu hình ở bảng `[bridge]` của `server/config.toml`:
+  - `kind = "claude_cli"`: gọi `claude -p` của Claude Code (cần cài và đăng nhập `claude` trước), chạy trong `_local/claude-workdir`, chỉ có WebSearch/WebFetch.
+  - `kind = "clipboard"`: transcript được chép vào clipboard, dán vào Claude Desktop/web; copy câu trả lời rồi bấm `Ctrl+Alt+R` (đổi bằng `hotkey`) để nghe.
+  - `kind = "none"`: chỉ STT + TTS như Phase 3.
+  - `auto_ask = false`: nói xong không tự hỏi, sửa transcript rồi mới bấm **Hỏi Claude**.
+- Mỗi lượt hỏi được ghi vào `_local/sessions/YYYY-MM-DD.jsonl` (câu hỏi, trả lời, độ trễ, chi phí CLI báo).
+
+Đo độ trễ (server đang chạy, `kind = "claude_cli"`, mỗi lần chạy tốn hạn mức như hỏi thật 5 câu):
+
+```powershell
+.venv\Scripts\python bench\claude_ws_client.py          # thả phím → nghe câu đầu, kiểm tra nhớ ngữ cảnh
+.venv\Scripts\python bench\claude_ws_client.py --text   # hỏi bằng text, bỏ qua STT
+```

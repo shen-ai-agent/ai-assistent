@@ -12,6 +12,7 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 | T-006 | Quyết định: dự án narration có gộp vào repo này không | — | ✅ 16/10/2026: không |
 | T-007 | Vòng tự học có kiểm soát từ bản sửa tay | 2 → 5 | ✅ 16/10/2026 (công cụ); dữ liệu tích luỹ khi dùng |
 | T-008 | TTS: chọn model, chuẩn hoá text, stream về web | 3 | ✅ 16/10/2026 |
+| T-009 | Claude bridge: clipboard + Claude Code headless, stream câu trả lời sang TTS | 4 | 🟡 code xong, còn dùng thật |
 
 ---
 
@@ -114,3 +115,25 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 **Nghe thử (16/10/2026).** Người dùng thấy đọc ổn; bấm ⏹ tắt tiếng ngay. Phase 3 ✅.
 
 **Còn lại.** Chưa kiểm trên trình duyệt: giữ Space khi đang đọc thì dừng đọc và nhận dạng bình thường (có test `test_start_interrupts_speaking` phía server).
+
+## T-009: Claude bridge: clipboard + Claude Code headless, stream câu trả lời sang TTS
+
+**Bối cảnh.** Xem Phase 4 trong PLAN.md. Hỏi bằng giọng nói, nghe Claude trả lời; câu đầu phải đến sớm nên không chờ Claude viết xong mới đọc.
+
+**Kết quả (16/10/2026).**
+- `server/bridge/`: interface `Bridge` (`ask` là async generator: `TextDelta` … `Done`, lỗi `BridgeError`), chọn bằng `[bridge] kind` (`claude_cli` / `clipboard` / `none`). Mặc định của `Config` là `none` để test không gọi Claude.
+- `claude_cli.py`: `claude -p --output-format stream-json --include-partial-messages`, `--resume --fork-session` theo session của server, `--append-system-prompt` từ `prompts/voice_reply.md`, chỉ WebSearch/WebFetch. Chạy trong `_local/claude-workdir`; vì thư mục này nằm trong repo nên tắt CLAUDE.md, git status, memory qua `--settings` (đã kiểm: không tắt thì Claude đọc CLAUDE.md của repo). Không dùng `--bare` vì chế độ đó chỉ nhận API key. Huỷ thì kill tiến trình; có timeout.
+- `clipboard.py`: đọc/ghi clipboard Win32 và hotkey toàn cục (`RegisterHotKey`) qua ctypes, không thêm package. Hotkey khi không có lượt nào chờ thì đọc clipboard ở tab mới nhất.
+- `feeder.py`: cắt text stream ở dấu kết câu + khoảng trắng hoặc xuống dòng, không cắt trong code block, dừng ở `---CODE---`.
+- Protocol: `ask`, `ask_stop`, `new_session`; server gửi `answer_start/delta/end`, `bridge_session`, state `WAITING_CLAUDE`. `speak_start` không còn danh sách câu: câu đến dần qua `speak_more`. Bắt đầu nói thì dừng cả hỏi lẫn đọc.
+- Web: câu trả lời hiện dưới lượt nói, khung code riêng, số đo (text đầu, trả lời xong, chi phí, thả phím → nghe câu đầu); ô gõ tay có "Hỏi Claude", nút "Session mới".
+- Log `_local/sessions/YYYY-MM-DD.jsonl`.
+- Test: `tests/test_bridge.py` (feeder, parser stream-json, `ClaudeCliBridge` với tiến trình claude giả: resume, fork, lỗi, huỷ, timeout), bridge giả trong `tests/test_server.py`. 101 test.
+- Đo (`bench/claude_ws_client.py`: server tự đọc câu hỏi thành audio rồi gửi như lượt nói, 5 câu): thả phím → nghe câu đầu p50 4.4s / max 4.6s; STT ~1s, Claude text đầu 3–4s. Câu 3 "dịch vụ đầu tiên mình hỏi" trả lời đúng EC2. Chi phí CLI báo $0.025 → $0.088 mỗi lượt, tăng dần theo độ dài session.
+- Sửa sau khi người dùng thử trên web: lượt bị ngắt vẫn nằm trong session (`--resume` ghi tiếp vào cùng session id), nên lượt sau ("hello ?") Claude trả lời bù câu bị ngắt, đọc hơn 60 giây. Giờ mỗi lượt resume dùng `--fork-session`, và chỉ lượt trả lời xong mới thành session của lượt sau; lượt bị ngắt hoặc lỗi bị bỏ. Đã kiểm với Claude thật: ngắt câu lịch sử AWS rồi hỏi "hello ?" thì chỉ được một câu chào. Prompt thêm quy tắc: câu hỏi đơn giản trả lời một hai câu, chỉ trả lời câu mới nhất.
+- Chọn model trên web: `set_model` / `bridge_model`, danh sách từ `[bridge] models`, tên model thật lấy từ event `init` và hiện trong số đo, ghi vào log. Thử một câu "EC2 là gì?" mỗi model (một mẫu, chưa phải benchmark): mặc định = claude-opus-5-5 text đầu 3.2s; sonnet 2.0s; haiku 4.1s. Chi phí CLI báo dao động theo cache ($0.009–0.031) nên một lượt không so được model nào rẻ hơn.
+
+**Còn lại.**
+- Thử bridge clipboard trọn vòng trên trình duyệt (nói → paste vào Claude → copy câu trả lời → Ctrl+Alt+R).
+- Dùng thật 3 buổi tối, ghi `_local/feedback.md` ≥5 mục. Để ý: chi phí tăng theo session dài (bấm "Session mới" khi đổi chủ đề), câu cần WebSearch chậm hơn.
+- Người dùng tự đọc điều khoản subscription cho cách dùng `claude -p` này.

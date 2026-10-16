@@ -7,20 +7,35 @@ Client → Server
   {"type": "cancel"}                            huỷ lượt hiện tại (kể cả khi đang nhận dạng)
   {"type": "correction", "turn_id": "...", "text": "..."}   người dùng sửa tay transcript
   {"type": "speak", "text": "..."}              đọc text (thay lượt đọc đang chạy)
-  {"type": "speak_stop"}                        dừng đọc
+  {"type": "speak_stop"}                        dừng đọc (Claude vẫn trả lời tiếp, chỉ không đọc)
+  {"type": "ask", "text": "..."}                hỏi Claude bằng text gõ tay (thay lượt hỏi đang chạy)
+  {"type": "ask_stop"}                          dừng hỏi và dừng đọc câu trả lời
+  {"type": "new_session"}                       Claude quên ngữ cảnh cũ
+  {"type": "set_model", "model": "sonnet"}      đổi model cho các lượt sau ("" = mặc định), áp cho mọi tab
 
 Server → Client
   {"type": "hello", "topics": [...], "model": "...", "sample_rate": 16000,
-   "tts": {"sample_rate": 48000, "voice": "..."} | null}          null = server tắt TTS
-  {"type": "state", "value": "IDLE" | "LISTENING" | "TRANSCRIBING"}
+   "tts": {"sample_rate": 48000, "voice": "..."} | null,          null = server tắt TTS
+   "bridge": {"kind": "claude_cli" | "clipboard", "auto_ask": bool, "session_id",
+              "model": str | null, "models": [...]} | null}     model null = bridge không chọn được model
+  {"type": "state", "value": "IDLE" | "LISTENING" | "TRANSCRIBING" | "WAITING_CLAUDE"}
   {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms", "stt_ms"}
   {"type": "error", "code": "...", "message": "..."}
-  {"type": "speak_start", "speak_id": n, "sentences": [{"text", "source", "lang"}, ...]}
-  {"type": "speak_sentence", "speak_id": n, "index": i}          câu i bắt đầu (gửi trước audio của câu)
+  {"type": "speak_start", "speak_id": n}
+  {"type": "speak_more", "speak_id": n, "sentences": [{"text", "source", "lang"}, ...]}   thêm câu vào cuối
+  {"type": "speak_sentence", "speak_id": n, "index": i}          câu i (đếm từ đầu lượt) bắt đầu, trước audio của câu
   <binary>  4 byte uint32 LE speak_id + PCM int16 LE mono, sample rate trong hello.tts
   {"type": "speak_end", "speak_id": n, "cancelled": bool, "ttfa_ms", "synth_ms", "audio_ms"}
 
+  {"type": "answer_start", "ask_id": n, "question": "...", "speak_id": n | null}   câu trả lời đọc bằng speak_id này
+  {"type": "answer_delta", "ask_id": n, "text": "..."}          text thô (markdown, có thể có ---CODE---)
+  {"type": "answer_end", "ask_id": n, "cancelled": bool, "error": str | null, "session_id",
+   "first_text_ms", "total_ms", "cost_usd", "model"}            model: tên model thật đã trả lời
+  {"type": "bridge_session", "session_id": str | null}           sau new_session
+  {"type": "bridge_model", "model": str}                         sau set_model, gửi tới mọi tab
+
 speak_id tăng dần trong một kết nối; client bỏ audio có speak_id cũ (đến trễ sau khi bấm dừng).
+Câu trả lời của Claude đến dần nên câu được gửi dần bằng speak_more; speak_end sau câu cuối.
 """
 
 from __future__ import annotations
@@ -34,6 +49,7 @@ class State(StrEnum):
     IDLE = "IDLE"
     LISTENING = "LISTENING"
     TRANSCRIBING = "TRANSCRIBING"
+    WAITING_CLAUDE = "WAITING_CLAUDE"
 
 
 class ErrorCode(StrEnum):
@@ -44,10 +60,13 @@ class ErrorCode(StrEnum):
     STT_FAILED = "stt_failed"
     TTS_FAILED = "tts_failed"
     TTS_DISABLED = "tts_disabled"
+    BRIDGE_DISABLED = "bridge_disabled"
+    BRIDGE_FAILED = "bridge_failed"
 
 
-def hello(topics: list[str], model: str, tts: dict | None = None) -> dict:
-    return {"type": "hello", "topics": topics, "model": model, "sample_rate": SAMPLE_RATE, "tts": tts}
+def hello(topics: list[str], model: str, tts: dict | None = None, bridge: dict | None = None) -> dict:
+    return {"type": "hello", "topics": topics, "model": model, "sample_rate": SAMPLE_RATE, "tts": tts,
+            "bridge": bridge}
 
 
 def state(value: State) -> dict:
@@ -64,8 +83,12 @@ def error(code: ErrorCode, message: str) -> dict:
     return {"type": "error", "code": str(code), "message": message}
 
 
-def speak_start(speak_id: int, sentences: list[dict]) -> dict:
-    return {"type": "speak_start", "speak_id": speak_id, "sentences": sentences}
+def speak_start(speak_id: int) -> dict:
+    return {"type": "speak_start", "speak_id": speak_id}
+
+
+def speak_more(speak_id: int, sentences: list[dict]) -> dict:
+    return {"type": "speak_more", "speak_id": speak_id, "sentences": sentences}
 
 
 def speak_sentence(speak_id: int, index: int) -> dict:
@@ -79,3 +102,27 @@ def speak_end(speak_id: int, cancelled: bool, ttfa_ms: int | None, synth_ms: int
 
 def audio_frame(speak_id: int, pcm16: bytes) -> bytes:
     return speak_id.to_bytes(4, "little") + pcm16
+
+
+def answer_start(ask_id: int, question: str, speak_id: int | None) -> dict:
+    return {"type": "answer_start", "ask_id": ask_id, "question": question, "speak_id": speak_id}
+
+
+def answer_delta(ask_id: int, text: str) -> dict:
+    return {"type": "answer_delta", "ask_id": ask_id, "text": text}
+
+
+def answer_end(ask_id: int, cancelled: bool, error: str | None, session_id: str | None,
+               first_text_ms: int | None, total_ms: int, cost_usd: float | None,
+               model: str | None = None) -> dict:
+    return {"type": "answer_end", "ask_id": ask_id, "cancelled": cancelled, "error": error,
+            "session_id": session_id, "first_text_ms": first_text_ms, "total_ms": total_ms, "cost_usd": cost_usd,
+            "model": model}
+
+
+def bridge_session(session_id: str | None) -> dict:
+    return {"type": "bridge_session", "session_id": session_id}
+
+
+def bridge_model(model: str) -> dict:
+    return {"type": "bridge_model", "model": model}

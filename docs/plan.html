@@ -566,17 +566,27 @@
   {"type": "correction", "turn_id", "text"}  người dùng sửa tay transcript (ghi log, T-003)
   {"type": "speak", "text"}                  đọc text (Phase 3); speak mới hoặc start thì dừng lượt đọc cũ
   {"type": "speak_stop"}                     dừng đọc
+  {"type": "ask", "text"}                    hỏi Claude bằng text gõ tay (Phase 4)
+  {"type": "ask_stop"}                       dừng hỏi (kill claude) và dừng đọc
+  {"type": "new_session"}                    Claude quên ngữ cảnh cũ
+  {"type": "set_model", "model"}             đổi model Claude cho các lượt sau, mọi tab
 
 Server → Client
-  {"type": "hello", "topics": [...], "model": "large-v3", "sample_rate": 16000}
-  {"type": "state", "value": "TRANSCRIBING"}
+  {"type": "hello", "topics": [...], "model": "large-v3", "sample_rate": 16000, "tts": {...}, "bridge": {...}}
+  {"type": "state", "value": "TRANSCRIBING"}           IDLE | LISTENING | TRANSCRIBING | WAITING_CLAUDE
   {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms": 8400, "stt_ms": 1350}
   {"type": "error", "code": "stt_failed", "message": "..."}
-  {"type": "speak_start", "speak_id", "sentences": [{"text", "source", "lang"}]}
+  {"type": "speak_start", "speak_id"}
+  {"type": "speak_more", "speak_id", "sentences": [{"text", "source", "lang"}]}   câu đến dần, nối vào cuối
   {"type": "speak_sentence", "speak_id", "index"}      bắt đầu tổng hợp câu index
   &lt;binary&gt;                                   4 byte speak_id (uint32 LE) + PCM int16 LE, mono, sample rate trong hello.tts
-  {"type": "speak_end", "speak_id", "cancelled", "ttfa_ms", "synth_ms", "audio_ms"}</pre>
-  <p style="font-size:14px;color:var(--muted)">Phase 4 sẽ thêm <code>response_text</code>, <code>ask</code>. Mọi message định nghĩa ở <code>protocol.py</code>.</p>
+  {"type": "speak_end", "speak_id", "cancelled", "ttfa_ms", "synth_ms", "audio_ms"}
+  {"type": "answer_start", "ask_id", "question", "speak_id"}      Phase 4: câu trả lời đọc bằng speak_id này
+  {"type": "answer_delta", "ask_id", "text"}
+  {"type": "answer_end", "ask_id", "cancelled", "error", "session_id", "first_text_ms", "total_ms", "cost_usd", "model"}
+  {"type": "bridge_session", "session_id"}
+  {"type": "bridge_model", "model"}</pre>
+  <p style="font-size:14px;color:var(--muted)">Mọi message định nghĩa ở <code>protocol.py</code>.</p>
 
   <h3>TODO</h3>
   <h4>A. Server</h4>
@@ -774,17 +784,19 @@ Server → Client
 
   <h3>Interface chung</h3>
 <pre>class Bridge(Protocol):
-    async def ask(self, text: str) -&gt; AsyncIterator[str]: ...   # stream từng đoạn text
-    async def new_session(self) -&gt; None: ...
-    async def cancel(self) -&gt; None: ...</pre>
-  <p style="font-size:14px;color:var(--muted)">Chọn bridge qua config. STT/TTS chỉ biết interface này.</p>
+    name: str
+    session_id: str | None
+    def ask(self, text: str) -&gt; AsyncIterator[TextDelta | Done]: ...   # async generator; lỗi = BridgeError
+    def new_session(self) -&gt; None: ...
+# Huỷ = đóng generator (aclose): ClaudeCliBridge kill tiến trình claude, ClipboardBridge bỏ chờ hotkey</pre>
+  <p style="font-size:14px;color:var(--muted)">Chọn bridge qua <code>[bridge] kind</code> trong <code>server/config.toml</code>. STT/TTS chỉ biết interface này.</p>
 
   <h3>TODO</h3>
   <h4>4a. Clipboard bridge — MVP</h4>
   <ul class="tasks">
-    <li><label><input type="checkbox"><span class="t">STT xong → tự copy transcript vào clipboard (web dùng <code>navigator.clipboard.writeText</code>)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">STT xong → tự copy transcript vào clipboard (server ghi bằng Win32, không cần quyền clipboard của trình duyệt)</span></label></li>
     <li><label><input type="checkbox"><span class="t">Hotkey toàn cục (ví dụ <code>Ctrl+Alt+R</code>) do server lắng nghe → đọc clipboard → normalize → TTS</span></label>
-      <div class="hint">Dùng <code>pynput</code> hoặc <code>keyboard</code> trên Windows. Phương án dự phòng: nút "Đọc clipboard" trên web.</div></li>
+      <div class="hint">Dùng <code>RegisterHotKey</code> qua ctypes, không thêm package. Hotkey khi không có lượt nào chờ thì đọc clipboard ở tab mới nhất.</div></li>
     <li><label><input type="checkbox"><span class="t">Trạng thái <code>WAITING_CLAUDE</code> hiện trên UI từ lúc copy đến lúc nhận hotkey</span></label></li>
   </ul>
 
@@ -795,7 +807,7 @@ Server → Client
       <div class="hint">Để Claude không đọc hay sửa code của dự án khi đang trả lời câu hỏi học.</div></li>
     <li><label><input type="checkbox"><span class="t">Giới hạn công cụ: chỉ cho <code>WebSearch</code>, <code>WebFetch</code> (<code>--allowedTools</code>)</span></label></li>
     <li><label><input type="checkbox"><span class="t"><code>ClaudeCliBridge</code>: chạy <code>claude -p</code> bằng <code>asyncio.create_subprocess_exec</code>, <code>--output-format stream-json</code></span></label></li>
-    <li><label><input type="checkbox"><span class="t">Lấy <code>session_id</code> từ lượt đầu; các lượt sau dùng <code>--resume &lt;session_id&gt;</code></span></label></li>
+    <li><label><input type="checkbox"><span class="t">Lấy <code>session_id</code> từ lượt đầu; các lượt sau dùng <code>--resume &lt;session_id&gt; --fork-session</code>; lượt bị ngắt hoặc lỗi không thành ngữ cảnh của lượt sau</span></label></li>
     <li><label><input type="checkbox"><span class="t">Đưa instruction văn nói qua <code>--append-system-prompt</code></span></label></li>
     <li><label><input type="checkbox"><span class="t">Parse stream → đẩy từng đoạn text vào splitter → TTS đọc câu đầu khi Claude chưa viết xong</span></label></li>
     <li><label><input type="checkbox"><span class="t">Xử lý lỗi: chưa đăng nhập, hết hạn mức subscription, timeout (ví dụ 120s) → đọc thông báo lỗi bằng giọng nói</span></label></li>
@@ -818,6 +830,20 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Đổi bridge clipboard ↔ CLI chỉ bằng config</span></label></li>
     <li><label><input type="checkbox"><span class="t"><b>Dùng thật <span class="metric">3</span> buổi tối liên tiếp</b>, <code>feedback.md</code> có ≥ 5 mục</span></label></li>
   </ul>
+
+  <h3>Trạng thái (16/10/2026)</h3>
+  <div class="box">
+    <p><b>Code xong (T-009), chưa đạt DoD:</b> còn thử 4a trên trình duyệt và dùng thật 3 buổi tối.</p>
+    <ul>
+      <li><b>Bridge:</b> <code>server/bridge/</code> có <code>claude_cli</code>, <code>clipboard</code>, <code>none</code>. Đổi bằng <code>[bridge] kind</code>, không sửa STT/TTS.</li>
+      <li><b>Claude Code headless:</b> <code>claude -p --output-format stream-json --include-partial-messages --resume --fork-session</code>, chạy trong <code>_local/claude-workdir</code>, chỉ WebSearch/WebFetch. Thư mục này nằm trong repo nên tắt CLAUDE.md, git status, memory qua <code>--settings</code> (không tắt thì Claude đọc CLAUDE.md của repo). Không dùng <code>--bare</code> vì chỉ nhận API key.</li>
+      <li><b>Stream sang TTS:</b> <code>feeder.py</code> cắt câu khi text còn đang đến, không cắt trong code block, dừng ở <code>---CODE---</code>.</li>
+      <li><b>Đo</b> (<code>bench/claude_ws_client.py</code>, server tự đọc câu hỏi thành audio rồi gửi như lượt nói, 5 câu): thả phím → nghe câu đầu p50 <b>4.4s</b>, max 4.6s (STT ~1s, Claude text đầu 3–4s). Câu 3 "dịch vụ đầu tiên mình hỏi" trả lời đúng EC2.</li>
+      <li><b>Ngắt:</b> Esc / ⏹ / bắt đầu nói → kill <code>claude</code>, <code>answer_end</code> sau ~25ms, không sót tiến trình.</li>
+      <li><b>Chi phí</b> CLI báo $0.025 → $0.088 mỗi lượt, tăng theo độ dài session: đổi chủ đề thì bấm "Session mới".</li>
+      <li><b>Chưa làm:</b> thử clipboard + Ctrl+Alt+R trọn vòng; đọc điều khoản subscription; dùng thật 3 buổi tối, <code>_local/feedback.md</code> ≥ 5 mục.</li>
+    </ul>
+  </div>
 
   <h3>Rủi ro</h3>
   <table>

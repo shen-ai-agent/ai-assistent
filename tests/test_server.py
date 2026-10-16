@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 
@@ -10,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app import create_app
+from server.bridge import BridgeError, Done, TextDelta
 from server.config import Config
 from server.stt.engine import Transcript
 
@@ -151,19 +153,21 @@ def test_speak_streams_audio(tmp_path):
         with client.websocket_connect("/ws") as ws:
             assert ws.receive_json()["tts"] == {"sample_rate": 48000, "voice": "maichi"}
             ws.send_json({"type": "speak", "text": TWO})
-            frames, sentences = [], []
+            frames, sentences, planned = [], [], []
             while True:
                 msg = recv_any(ws)
                 if isinstance(msg, bytes):
                     frames.append(msg)
                 elif msg["type"] == "speak_start":
                     start = msg
+                elif msg["type"] == "speak_more":
+                    planned += msg["sentences"]
                 elif msg["type"] == "speak_sentence":
                     sentences.append(msg["index"])
                 elif msg["type"] == "speak_end":
                     end = msg
                     break
-    assert [s["source"] for s in start["sentences"]] == TWO_SRC
+    assert [s["source"] for s in planned] == TWO_SRC
     assert sentences == [0, 1] and len(frames) == 6
     assert all(int.from_bytes(f[:4], "little") == start["speak_id"] for f in frames)
     assert len(frames[0]) == 4 + 4800 * 2 and np.frombuffer(frames[0][4:], "<i2")[0] == 16383
@@ -216,6 +220,174 @@ def test_speak_disabled_and_empty(setup):
         assert recv_until(ws, "error")["code"] == "tts_disabled"
         ws.send_json({"type": "speak", "text": "  "})
         assert recv_until(ws, "error")["code"] == "bad_message"
+
+
+class FakeBridge:
+    """Trả lời theo kịch bản deltas. gate: chặn sau delta đầu để test dừng giữa chừng."""
+
+    name = "fake"
+
+    def __init__(self, deltas: list[str], gate: threading.Event | None = None, fail: str | None = None):
+        self.deltas, self.gate, self.fail = deltas, gate, fail
+        self.session_id: str | None = None
+        self.questions: list[str] = []
+        self.closed = threading.Event()
+
+    def new_session(self):
+        self.session_id = None
+
+    async def ask(self, text):
+        self.questions.append(text)
+        try:
+            for i, d in enumerate(self.deltas):
+                if i == 1 and self.gate is not None:
+                    await asyncio.to_thread(self.gate.wait, 5)
+                yield TextDelta(d)
+            if self.fail:
+                raise BridgeError(self.fail)
+            self.session_id = "s1"
+            yield Done("s1", 0.01)
+        finally:
+            self.closed.set()
+
+
+ANSWER = ["Chào bạn. EC2 là máy", " ảo chạy trên AWS nhé.\n---CO", "DE---\n```bash\naws ec2 run-instances\n```"]
+
+
+def bridge_client(tmp_path, bridge, tts=None, auto_ask=True):
+    cfg = Config(log_dir=tmp_path / "logs", save_audio=False, min_speech_ms=0, tts_enabled=tts is not None,
+                 bridge_auto_ask=auto_ask, bridge_log_dir=tmp_path / "sessions")
+    return TestClient(create_app(cfg, engine_factory=lambda _cfg: FakeEngine(), tts_factory=lambda _cfg: tts,
+                                 bridge_factory=lambda _cfg: bridge))
+
+
+def collect_until(ws, kind):
+    """Mọi message JSON (bỏ audio) tới khi gặp kind."""
+    msgs = []
+    while True:
+        msg = recv_any(ws)
+        if isinstance(msg, dict):
+            msgs.append(msg)
+            if msg["type"] == kind:
+                return msgs
+
+
+def test_voice_turn_asks_claude_and_speaks(tmp_path):
+    bridge, tts = FakeBridge(ANSWER), FakeTts()
+    with bridge_client(tmp_path, bridge, tts) as client:
+        assert client.get("/health").json()["bridge"] == "fake"
+        with client.websocket_connect("/ws") as ws:
+            assert ws.receive_json()["bridge"] == {"kind": "fake", "auto_ask": True, "session_id": None,
+                                                 "model": None, "models": []}
+            ws.send_json({"type": "start", "topic": "AWS"})
+            ws.send_bytes(pcm(1.0))
+            ws.send_json({"type": "stop"})
+            msgs = collect_until(ws, "answer_end")
+            msgs += collect_until(ws, "speak_end")
+    kinds = [m["type"] for m in msgs]
+    assert kinds.index("transcript") < kinds.index("answer_start") < kinds.index("answer_end")
+    assert {"type": "state", "value": "WAITING_CLAUDE"} in msgs
+    assert [m for m in msgs if m["type"] == "state"][-1]["value"] == "IDLE"
+    assert bridge.questions == ["mình muốn hỏi về EC2 và S3"]
+    start = next(m for m in msgs if m["type"] == "answer_start")
+    assert start["speak_id"] == next(m for m in msgs if m["type"] == "speak_start")["speak_id"]
+    assert "".join(m["text"] for m in msgs if m["type"] == "answer_delta") == "".join(ANSWER)
+    spoken = [s["source"] for m in msgs if m["type"] == "speak_more" for s in m["sentences"]]
+    assert spoken == ["Chào bạn.", "EC2 là máy ảo chạy trên AWS nhé."]  # phần sau ---CODE--- không đọc
+    end = next(m for m in msgs if m["type"] == "answer_end")
+    assert end["session_id"] == "s1" and end["error"] is None and end["cancelled"] is False
+    assert end["first_text_ms"] is not None
+    rec = json.loads(next((tmp_path / "sessions").glob("*.jsonl")).read_text(encoding="utf-8"))
+    assert rec["question"] == "mình muốn hỏi về EC2 và S3" and rec["answer"] == "".join(ANSWER)
+    assert rec["cost_usd"] == 0.01
+
+
+def test_auto_ask_off_and_typed_ask(tmp_path):
+    bridge = FakeBridge(["Được."])
+    with bridge_client(tmp_path, bridge, auto_ask=False) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "start", "topic": "AWS"})
+            ws.send_bytes(pcm(1.0))
+            ws.send_json({"type": "stop"})
+            recv_until(ws, "transcript")
+            assert recv_until(ws, "state")["value"] == "IDLE"
+            ws.send_json({"type": "ask", "text": "S3 là gì?"})
+            start = recv_until(ws, "answer_start")
+            assert start["speak_id"] is None  # TTS tắt: chỉ có text
+            assert recv_until(ws, "answer_end")["error"] is None
+    assert bridge.questions == ["S3 là gì?"]
+
+
+def test_ask_stop_closes_bridge(tmp_path):
+    gate = threading.Event()
+    bridge = FakeBridge(ANSWER, gate)
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "ask", "text": "EC2 là gì?"})
+            recv_until(ws, "answer_delta")
+            ws.send_json({"type": "ask_stop"})
+            end = recv_until(ws, "answer_end")
+            gate.set()
+    assert end["cancelled"] is True
+    assert bridge.closed.wait(2)  # generator bị đóng = bridge thật kill tiến trình claude
+
+
+def test_start_interrupts_answer(tmp_path):
+    gate = threading.Event()
+    bridge = FakeBridge(ANSWER, gate)
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "ask", "text": "EC2 là gì?"})
+            recv_until(ws, "answer_delta")
+            ws.send_json({"type": "start", "topic": "AWS"})
+            assert recv_until(ws, "answer_end")["cancelled"] is True
+            gate.set()
+
+
+def test_bridge_error_reported(tmp_path):
+    bridge = FakeBridge(["Đang tìm"], fail="Hết hạn mức")
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "ask", "text": "Giá EC2?"})
+            err = recv_until(ws, "error")
+            end = recv_until(ws, "answer_end")
+            assert recv_until(ws, "state")["value"] == "IDLE"
+    assert err["code"] == "bridge_failed" and err["message"] == "Hết hạn mức"
+    assert end["error"] == "Hết hạn mức"
+
+
+def test_new_session_and_disabled(tmp_path, setup):
+    bridge = FakeBridge(["Được."])
+    bridge.session_id = "old"
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "new_session"})
+            assert recv_until(ws, "bridge_session")["session_id"] is None
+    client, _, _ = setup
+    with client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["bridge"] is None
+        ws.send_json({"type": "ask", "text": "S3?"})
+        assert recv_until(ws, "error")["code"] == "bridge_disabled"
+
+
+def test_set_model_applies_to_all_tabs(tmp_path):
+    bridge = FakeBridge(["Được."])
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            assert ws.receive_json()["bridge"]["model"] is None  # FakeBridge không chọn được model
+            ws.send_json({"type": "set_model", "model": "sonnet"})
+            assert recv_until(ws, "error")["code"] == "bridge_disabled"
+        bridge.model = ""
+        with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
+            hello = a.receive_json()
+            assert hello["bridge"]["model"] == "" and hello["bridge"]["models"] == ["sonnet", "opus", "haiku"]
+            recv_until(b, "state")
+            a.send_json({"type": "set_model", "model": "gpt"})
+            assert recv_until(a, "error")["code"] == "bad_message"
+            a.send_json({"type": "set_model", "model": "haiku"})
+            assert recv_until(a, "bridge_model")["model"] == "haiku"
+            assert recv_until(b, "bridge_model")["model"] == "haiku"
+    assert bridge.model == "haiku"
 
 
 def test_silence_skipped_by_vad(tmp_path):
