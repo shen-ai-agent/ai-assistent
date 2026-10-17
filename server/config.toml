@@ -3,6 +3,9 @@
 [server]
 host = "127.0.0.1"
 port = 8765
+# Điện thoại cùng Wi-Fi mở https://<IP máy>:8766 (chứng chỉ tự ký, tạo theo README). 0 = tắt.
+# Không có đăng nhập: máy nào trong mạng LAN cũng dùng được; đừng port-forward cổng này ra Internet.
+lan_port = 8766
 
 [stt]
 # Chọn theo benchmark Phase 1 (_local/stt_report.md)

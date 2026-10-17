@@ -14,6 +14,10 @@ DEFAULT_PATH = Path(__file__).resolve().parent / "config.toml"
 class Config:
     host: str = "127.0.0.1"
     port: int = 8765
+    # Dùng từ điện thoại cùng Wi-Fi: thêm cổng HTTPS (mic trên trình duyệt cần HTTPS). 0 = tắt
+    lan_port: int = 0
+    lan_cert: Path = ROOT / "_local" / "certs" / "lan.crt"
+    lan_key: Path = ROOT / "_local" / "certs" / "lan.key"
     model: str = "large-v3"
     compute_type: str = "int8_float16"
     device: str = "cuda"
@@ -71,6 +75,7 @@ def load_config(path: Path = DEFAULT_PATH) -> Config:
     bridge = {f"bridge_{k}": v for k, v in raw.get("bridge", {}).items()}
     bridge.update({k: ROOT / bridge[k] for k in _PATHS if k in bridge})
     assistant = {f"assistant_{k}": v for k, v in raw.get("assistant", {}).items()}
+    server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key") if k in server})
     cfg = Config(**server, **stt, **tts, **bridge, **assistant)
     if "dir" in log:
         cfg.log_dir = ROOT / log["dir"]

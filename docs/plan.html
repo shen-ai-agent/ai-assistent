@@ -166,6 +166,7 @@
   <a href="#phase5">5 · Hoàn thiện <span class="pct" data-for="phase5"></span></a>
   <a href="#phase6">6 · Giọng của mình <span class="pct" data-for="phase6"></span></a>
   <a href="#phase7">7 · Mọi thiết bị <span class="pct" data-for="phase7"></span></a>
+  <a href="#phase8">8 · Tự học dài hạn <span class="pct" data-for="phase8"></span></a>
   <div class="group-label">Khác</div>
   <a href="#risks">Rủi ro tổng thể</a>
   <a href="#rules">Quy ước làm việc</a>
@@ -277,6 +278,7 @@
     <div class="rm-row"><div class="ph">Phase 5</div><div class="rm-track"><span style="left:67%;width:18%">Hoàn thiện theo feedback</span></div><div class="dur">3–8 buổi</div></div>
     <div class="rm-row"><div class="ph">Phase 6</div><div class="rm-track"><span class="opt" style="left:85%;width:15%">Giọng của mình (tuỳ chọn)</span></div><div class="dur">4–8 buổi</div></div>
     <div class="rm-row"><div class="ph">Phase 7</div><div class="rm-track"><span style="left:67%;width:15%">Mọi thiết bị (song song 5/6)</span></div><div class="dur">3–5 buổi</div></div>
+    <div class="rm-row"><div class="ph">Phase 8</div><div class="rm-track"><span style="left:67%;width:33%">Tự học dài hạn (song song 5–7, chạy liên tục)</span></div><div class="dur">liên tục</div></div>
   </div>
 
   <h3>Mốc quan trọng</h3>
@@ -891,8 +893,7 @@ Server → Client
   <ul class="tasks">
     <li><label><input type="checkbox"><span class="t">Bổ sung glossary + corrections từ lỗi trong log thật (công cụ có rồi: trang Đề xuất học, T-007)</span></label></li>
     <li><label><input type="checkbox"><span class="t">Đưa 50–100 câu từ log thật (có lưu wav) vào testset, chạy lại benchmark (công cụ có rồi: <code>bench/build_personal_set.py</code> + <code>stt_bench.py --testset</code>, T-007)</span></label></li>
-    <li><label><input type="checkbox"><span class="t"><b>Fine-tune LoRA</b> cho Whisper (chỉ khi Phase 1 kết luận cần)</span></label>
-      <div class="hint">Cần ≥ 1–2 giờ audio giọng bạn có transcript chuẩn. Đánh giá trên holdout, kiểm tra tiếng Việt thuần không bị kém đi.</div></li>
+    <li><label><input type="checkbox"><span class="t"><s>Fine-tune LoRA cho Whisper</s> → chuyển sang <a href="#phase8">Phase 8</a></span></label></li>
   </ul>
   <h4>Vận hành</h4>
   <ul class="tasks">
@@ -906,7 +907,8 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Term recall trên testset mở rộng ≥ <span class="metric">95%</span></span></label></li>
     <li><label><input type="checkbox"><span class="t">Ngắt lời: bấm → im lặng ≤ <span class="metric">200ms</span></span></label></li>
     <li><label><input type="checkbox"><span class="t">Rảnh tay (<code>wake_bench.py</code>): gọi tên nhận đúng ≥ <span class="metric">95%</span>; nhận nhầm 0 trên câu gần giống + testset, ≤ <span class="metric">1 lần/giờ</span> âm nền; câu hỏi bị cắt giữa chừng ≤ <span class="metric">1/20</span>; ngừng gọi tên → nghe câu đáp ≤ <span class="metric">1.5s</span></span></label></li>
-    <li><label><input type="checkbox"><span class="t">Ngắt lời bằng giọng (gọi tên lúc đang đọc) ≤ <span class="metric">1.5s</span>; mục 200ms ở trên tính cho nút/phím</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><s>Ngắt lời bằng giọng (gọi tên lúc đang đọc)</s>: bỏ 17/10/2026</span></label>
+      <div class="hint">Lúc đang đọc, STT chạy song song làm TTS giật (RTF 0,7 → 1,4). Giờ đang đọc thì không nhận dạng; ngắt bằng nút/phím (mục 200ms ở trên).</div></li>
     <li><label><input type="checkbox"><span class="t">Khởi động toàn bộ bằng <span class="metric">1</span> lệnh</span></label></li>
   </ul>
 </section>
@@ -987,6 +989,8 @@ Server → Client
   <h3>TODO</h3>
   <h4>A. Truy cập an toàn</h4>
   <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t"><b>Bước 0: cùng Wi-Fi</b>. Cổng HTTPS 8766 (chứng chỉ tự ký), điện thoại mở <code>https://192.168.1.199:8766</code></span></label>
+      <div class="hint">17/10/2026. Cùng tiến trình với cổng 8765, chung model. Không có đăng nhập vì chỉ dùng trong mạng LAN; đừng port-forward cổng này ra Internet.</div></li>
     <li><label><input type="checkbox"><span class="t"><b>Bước 1: Tailscale</b>. Cài lên PC và điện thoại, dùng <code>tailscale serve</code> để có HTTPS</span></label>
       <div class="hint">Chỉ các thiết bị trong tailnet của bạn mới thấy server. Không mở port router, không lộ ra Internet. Với nhu cầu "mọi thiết bị của mình" thì đây là đủ.</div></li>
     <li><label><input type="checkbox"><span class="t"><b>Bước 2 (chỉ khi cần public thật)</b>: Cloudflare Tunnel + Cloudflare Access (đăng nhập bằng email)</span></label>
@@ -1025,6 +1029,76 @@ Server → Client
     <tr><td>Lộ server ra Internet không có xác thực</td><td>Tailscale trước; không bao giờ port-forward trực tiếp; xác thực ở cả server.</td></tr>
     <tr><td>Chất lượng micro điện thoại khác tai nghe</td><td>Ghi thêm 20–30 câu bằng điện thoại vào testset, chạy lại benchmark.</td></tr>
     <tr><td>PC ở nhà tắt / ngủ</td><td>Tắt chế độ sleep khi server chạy; Wake-on-LAN.</td></tr>
+  </table>
+</section>
+
+<section class="phase" id="phase8">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 8</span>
+      <h2>Tự học dài hạn</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>chạy liên tục</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 2 (T-007), Phase 5 (T-010)</b></span>
+        <span class="chip">Làm song song được với: <b>Phase 5, 6, 7</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Trợ lý <b>tốt lên theo thời gian dùng</b>. Hệ thống tự gom tín hiệu lỗi khi dùng thật, tự đề xuất và tự kiểm tra; người dùng chỉ duyệt.</div>
+
+  <div class="flow">
+    <div class="node web">Dùng thật<small>log lượt nói, câu trả lời, gọi tên</small></div><span class="arrow">→</span>
+    <div class="node stt">Đề xuất<small>từ đọc sai, lỗi STT, mẫu gọi tên</small></div><span class="arrow">→</span>
+    <div class="node tts">Kiểm tra<small>số đo trên dev / nghe thử</small></div><span class="arrow">→</span>
+    <div class="node llm">Duyệt → áp dụng<small>đo lại định kỳ, gỡ được</small></div>
+  </div>
+
+  <div class="note">Giữ chia dev/holdout như Phase 1: chỉ lượt dev sinh đề xuất, holdout chỉ để kiểm chứng. Nhịp chạy: hằng ngày tự gom và duyệt; hằng tuần chạy bench lúc server rảnh (không chạy hai job GPU cùng lúc); hằng tháng chấm mù TTS và xem đã đủ dữ liệu fine-tune chưa.</div>
+
+  <h3>TODO</h3>
+  <h4>A. Cách đọc của TTS (làm trước)</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t">Thêm vào <code>data/lexicon.tsv</code> các từ viết hoa đọc như từ thường: TODO, FIXME, README, PLAN.md, CLAUDE.md</span></label>
+      <div class="hint">17/10/2026. Quy tắc cũ đánh vần mọi chữ in hoa 2–6 ký tự không có trong lexicon: "TODO" thành "ti ô đi ô", "README" thành "a i ây đi em i".</div></li>
+    <li><label><input type="checkbox"><span class="t">Ghi log các từ TTS phải đoán cách đọc: chữ in hoa không có trong lexicon (đang bị đánh vần), từ tiếng Anh không có trong lexicon</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tab <b>Cách đọc</b> trên trang Đề xuất học: nghe thử, sửa cách đọc, chọn "đọc như từ" / "đánh vần"; duyệt thì ghi vào lexicon</span></label>
+      <div class="hint"><code>TtsService</code> tự nạp lại lexicon khi file đổi, nên duyệt xong là có hiệu lực ngay.</div></li>
+    <li><label><input type="checkbox"><span class="t">Bấm vào một từ trong câu trả lời để sửa cách đọc, nghe lại ngay</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Gợi ý phiên âm cho cả đợt từ mới bằng Claude, người dùng duyệt</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Mỗi tháng: thêm câu trả lời thật vào bộ mẫu TTS, chấm mù lại bằng <code>bench/tts_bench.py</code></span></label></li>
+  </ul>
+  <h4>B. STT (mở rộng vòng tự học T-007)</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Đánh dấu lượt nghi sai, đưa vào hàng chờ sửa một chạm</span></label>
+      <div class="hint">Tín hiệu ngầm: Claude hỏi lại kiểu "mình chưa nghe rõ…", hoặc người dùng nói lại câu gần giống trong vài giây. Hiện chỉ 18/398 lượt được sửa tay, quá ít để học.</div></li>
+    <li><label><input type="checkbox"><span class="t">Lượt đã sửa kèm audio tự vào bộ test cá nhân; chạy <code>stt_bench.py</code> định kỳ (mỗi tuần hoặc mỗi 50 bản sửa) lúc server rảnh</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Biểu đồ tiến bộ trên trang Đề xuất học: WER cá nhân theo tuần, số lỗi đã học</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><b>Fine-tune LoRA</b> large-v3 khi có ≥ 2–3 giờ audio đã sửa ở dev (chuyển từ Phase 5)</span></label>
+      <div class="hint">Thử trước xem có vừa 12GB VRAM không. Chỉ nhận model mới nếu holdout cá nhân và bộ 100 câu không tệ hơn, tiếng Việt thuần không kém đi.</div></li>
+  </ul>
+  <h4>C. Gọi tên Mimi</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">Gom audio gọi tên thật (<code>_local/logs/wake-*.jsonl</code>) thành bộ gọi tên lớn dần</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Đủ vài trăm mẫu + âm nền: train openWakeWord riêng cho "Mimi" (bước B của T-010), so với bước A bằng <code>bench/wake_bench.py</code></span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Từ đã duyệt cách đọc thì không bị đọc sai lại ở lần chấm sau</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Từ TTS phải đoán xuất hiện ≥ <span class="metric">3</span> lần đều hiện trên tab Cách đọc</span></label></li>
+    <li><label><input type="checkbox"><span class="t">WER cá nhân trên holdout sau 1 tháng dùng thấp hơn lúc bắt đầu, có số theo từng tuần</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Mọi thay đổi được áp dụng (lexicon, glossary, rule, model) có số trước/sau và gỡ lại được</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Duyệt một đề xuất ≤ <span class="metric">2</span> chạm</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Học sai: rule/lexicon làm hỏng chỗ đang đúng</td><td>Kiểm tra trên dev trước khi duyệt; ghi quyết định vào <code>_local/learning/decisions.jsonl</code>, gỡ lại được.</td></tr>
+    <tr><td>Quá ít tín hiệu vì người dùng ít sửa tay</td><td>Tín hiệu ngầm (hỏi lại, nói lại) + hàng chờ sửa một chạm.</td></tr>
+    <tr><td>Fine-tune làm kém tiếng Việt thuần hoặc câu tiếng Anh</td><td>Đo theo nhóm vi/mix/dense/en trên holdout; không đạt thì giữ model gốc.</td></tr>
   </table>
 </section>
 

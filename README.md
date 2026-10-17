@@ -57,6 +57,19 @@ Mở http://127.0.0.1:8765, cho phép dùng micro, rồi **giữ Space** (hoặc
 - Cấu hình (model, port, lưu audio) nằm trong `server/config.toml`.
 - Log từng lượt: `_local/logs/turns-YYYY-MM-DD.jsonl`, kèm wav trong `_local/logs/audio/`.
 
+### Dùng từ điện thoại cùng Wi-Fi
+
+Server mở thêm cổng HTTPS `lan_port` (mặc định 8766) cho máy khác trong mạng LAN; trình duyệt chỉ cho dùng micro qua HTTPS. Tạo chứng chỉ tự ký một lần (Git Bash, thay IP bằng IP cố định của máy):
+
+```bash
+mkdir -p _local/certs
+MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+  -keyout _local/certs/lan.key -out _local/certs/lan.crt -subj "/CN=Voice Study Assistant" \
+  -addext "subjectAltName=IP:192.168.1.199,DNS:localhost,IP:127.0.0.1" -addext "extendedKeyUsage=serverAuth"
+```
+
+Trên điện thoại mở `https://192.168.1.199:8766`. Lần đầu trình duyệt cảnh báo chứng chỉ: chọn "Nâng cao" → "Tiếp tục truy cập". Đổi IP máy thì tạo lại chứng chỉ. Cổng này **không có đăng nhập**: máy nào trong mạng LAN cũng dùng được, đừng port-forward ra Internet. Không có chứng chỉ thì server chỉ chạy cổng 8765 như cũ.
+
 ### Đề xuất học (T-007)
 
 Link "Đề xuất học" ở góc trên trang Nói (số đỏ là số đề xuất đang chờ), hoặc http://127.0.0.1:8765/learn.html.

@@ -217,7 +217,7 @@ AI-assistent/
 - [x] Lệnh giọng nói (`server/assistant/commands.py`): "mở session mới", "dừng lại", "đọc lại" chạy ngay trên server, không hỏi Claude. Chỉ câu ngắn mới là lệnh
 - [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
-- [ ] **Fine-tune STT** (chỉ khi Phase 1 kết luận cần): LoRA trên whisper với dữ liệu giọng mình + thuật ngữ
+- [ ] ~~Fine-tune STT~~ → chuyển sang Phase 8 (tự học dài hạn), làm khi đủ audio đã sửa
 - [ ] Chỉnh tốc độ đọc, nút "đọc lại", "đọc chậm"
 - [ ] Script khởi động 1 lệnh (server + mở web)
 
@@ -226,7 +226,7 @@ AI-assistent/
 - [ ] Term recall trên testset mở rộng ≥ **95%**
 - [ ] Ngắt lời: từ lúc bấm đến khi dừng đọc ≤ **200ms**
 - [ ] Rảnh tay (`wake_bench.py`): gọi tên nhận đúng ≥ **95%**; nhận nhầm 0 trên câu gần giống + testset, ≤ **1 lần/giờ** âm nền; câu hỏi bị cắt giữa chừng ≤ **1/20**; ngừng gọi tên → nghe câu đáp ≤ **1.5s**
-- [ ] Ngắt lời bằng giọng (gọi tên lúc đang đọc) ≤ **1.5s**; mục 200ms ở trên tính cho nút/phím
+- [ ] ~~Ngắt lời bằng giọng (gọi tên lúc đang đọc)~~ bỏ 17/10/2026: lúc đang đọc không nhận dạng để TTS hết giật; ngắt bằng nút/phím (mục 200ms ở trên)
 - [ ] Khởi động toàn bộ hệ thống bằng 1 lệnh
 
 ---
@@ -257,6 +257,7 @@ AI-assistent/
 > Ảnh hưởng ngay từ bây giờ: web phải **responsive** và có **nút giữ để nói** (điện thoại không có phím Space). Clipboard bridge không dùng được trên điện thoại, nên Phase 4b là bắt buộc nếu muốn dùng từ xa.
 
 ### TODO
+- [x] Bước 0 — **Cùng Wi-Fi**: cổng HTTPS 8766 (chứng chỉ tự ký), điện thoại mở `https://192.168.1.199:8766`; không đăng nhập vì chỉ trong LAN (17/10/2026)
 - [ ] Bước 1 — **Mạng riêng (Tailscale)**: chỉ thiết bị của mình truy cập được, có HTTPS (`tailscale serve`)
 - [ ] Bước 2 (nếu thật sự cần public) — Cloudflare Tunnel + Cloudflare Access (đăng nhập bằng email), không mở port router
 - [ ] Bắt buộc **xác thực** trước WebSocket: server gọi được Claude và chạy GPU, để lộ là bị dùng chùa
@@ -274,6 +275,40 @@ AI-assistent/
 
 ---
 
+## Phase 8 — Tự học dài hạn
+
+**Mục tiêu:** trợ lý tốt lên theo thời gian dùng. Hệ thống tự gom tín hiệu lỗi khi dùng thật, tự đề xuất và tự kiểm tra; người dùng chỉ duyệt. Làm song song với Phase 5–7.
+
+> Mọi vòng học đi theo cùng một đường: gom tín hiệu → đề xuất → kiểm tra bằng số đo (nếu đo được) → duyệt → áp dụng → đo lại định kỳ. Giữ chia dev/holdout như Phase 1: chỉ lượt dev sinh đề xuất.
+
+### TODO
+**A. Cách đọc của TTS** (làm trước: lỗi nghe thấy rõ nhất, vd "TODO" bị đánh vần thành "ti ô đi ô")
+- [x] Thêm vào `data/lexicon.tsv` các từ viết hoa đọc như từ thường: TODO, FIXME, README, PLAN.md, CLAUDE.md (17/10/2026)
+- [ ] Ghi log các từ TTS phải đoán cách đọc: chữ in hoa không có trong lexicon (đang bị đánh vần), từ tiếng Anh không có trong lexicon
+- [ ] Tab "Cách đọc" trên trang Đề xuất học: từ gặp nhiều lần → nghe thử, sửa cách đọc, chọn "đọc như từ" / "đánh vần"; duyệt thì ghi vào lexicon (TTS tự nạp lại)
+- [ ] Bấm vào một từ trong câu trả lời để sửa cách đọc, nghe lại ngay
+- [ ] Gợi ý phiên âm cho cả đợt từ mới bằng Claude, người dùng duyệt
+- [ ] Mỗi tháng: thêm câu trả lời thật vào bộ mẫu TTS, chấm mù lại bằng `bench/tts_bench.py`
+
+**B. STT** (mở rộng vòng tự học T-007)
+- [ ] Đánh dấu lượt nghi sai: Claude hỏi lại kiểu "mình chưa nghe rõ…", hoặc người dùng nói lại câu gần giống trong vài giây; đưa vào hàng chờ sửa một chạm
+- [ ] Lượt đã sửa kèm audio tự vào bộ test cá nhân (`bench/build_personal_set.py`); chạy `stt_bench.py` định kỳ (mỗi tuần hoặc mỗi 50 bản sửa) lúc server rảnh, không chạy hai job GPU cùng lúc
+- [ ] Biểu đồ tiến bộ trên trang Đề xuất học: WER cá nhân theo tuần, số lỗi đã học
+- [ ] Fine-tune LoRA large-v3 khi có ≥ 2–3 giờ audio đã sửa ở dev (chuyển từ Phase 5); thử trước xem có vừa 12GB VRAM không
+
+**C. Gọi tên Mimi**
+- [ ] Gom audio gọi tên thật (`_local/logs/wake-*.jsonl`) thành bộ gọi tên lớn dần
+- [ ] Đủ vài trăm mẫu + âm nền: train openWakeWord riêng cho "Mimi" (bước B của T-010), so với bước A bằng `bench/wake_bench.py`
+
+### DoD
+- [ ] Từ đã duyệt cách đọc thì không bị đọc sai lại ở lần chấm sau
+- [ ] Từ TTS phải đoán xuất hiện ≥ 3 lần đều hiện trên tab Cách đọc
+- [ ] WER cá nhân trên holdout sau 1 tháng dùng thấp hơn lúc bắt đầu, có số theo từng tuần
+- [ ] Mọi thay đổi được áp dụng (lexicon, glossary, rule, model) có số trước/sau và gỡ lại được
+- [ ] Duyệt một đề xuất ≤ **2 chạm**
+
+---
+
 ## Theo dõi tiến độ
 
 | Phase | Nội dung | Trạng thái |
@@ -285,4 +320,5 @@ AI-assistent/
 | 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
 | 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền |
 | 6 | Giọng của chính mình | ⬜ |
-| 7 | Dùng từ mọi thiết bị | ⬜ |
+| 7 | Dùng từ mọi thiết bị | 🟡 17/10/2026 — dùng được trong LAN qua HTTPS 8766; từ xa (4G) chưa làm |
+| 8 | Tự học dài hạn | 🟡 17/10/2026 — có kế hoạch; lexicon thêm TODO, README, PLAN.md… |

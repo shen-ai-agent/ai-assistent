@@ -32,6 +32,7 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 ```
 
 - Tắt server: tìm PID bằng `netstat -ano | grep ":8765 .*LISTENING"` rồi `taskkill //F //PID <pid>`. Đừng kill mọi `python.exe`.
+- Có `_local/certs/lan.crt|key` thì server mở thêm `https://0.0.0.0:8766` (`lan_port`) cho điện thoại cùng Wi-Fi, cùng tiến trình với cổng 8765, không có đăng nhập. Tạo chứng chỉ theo README.
 - Server giữ model trên GPU (~2.5GB). Tắt server trước khi chạy `stt_bench.py`, nếu không sẽ thành hai job GPU cùng lúc.
 
 - Script in tiếng Việt phải gọi `sys.stdout.reconfigure(encoding="utf-8")` đầu `main()`. Console Windows mặc định cp1252, và `python -I` bỏ qua `PYTHONIOENCODING`.
