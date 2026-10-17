@@ -8,37 +8,62 @@
 </head>
 <body>
 <header>
-  <h1>Voice Study Assistant</h1>
+  <div class="brand">
+    <span class="orb-mini" aria-hidden="true"><i></i></span>
+    <div>
+      <h1>Voice Study Assistant</h1>
+      <p class="tagline">Trợ lý học bằng giọng nói</p>
+    </div>
+  </div>
   <nav class="tabs">
     <a href="#mimi" data-tab="mimi">Mimi</a>
     <a href="#detail" data-tab="detail">Chi tiết</a>
   </nav>
   <div class="status">
-    <a href="learn.html" class="nav">Đề xuất học <span id="learn-count" class="badge" hidden></span></a>
-    <span id="conn" class="dot" title="Kết nối server"></span>
-    <span id="state" class="state">…</span>
+    <a href="learn.html" class="nav" title="Đề xuất học">Học <span id="learn-count" class="badge" hidden></span></a>
+    <span class="chip" title="Kết nối server"><span id="conn" class="dot"></span><span id="state" class="state">…</span></span>
   </div>
 </header>
 
 <main id="tab-mimi" class="tab assistant">
-  <div class="stage">
-    <div id="orb" class="orb off" title="Trạng thái trợ lý"><div class="glow"></div><div class="core"></div></div>
-    <p id="orb-status" class="orb-status">…</p>
-    <p id="caption" class="caption"></p>
-    <div id="reply" class="reply" hidden>
-      <div class="reply-text"></div>
-      <pre class="reply-code" hidden></pre>
+  <div class="aura" aria-hidden="true"></div>
+  <section class="hero">
+    <div id="orb" class="orb off" title="Trạng thái trợ lý">
+      <div class="halo"></div>
+      <div class="sphere"><i class="fog"></i><i class="r1"></i><i class="r2"></i><i class="r3"></i><i class="r4"></i></div>
     </div>
+    <div class="hero-text">
+      <p id="orb-status" class="orb-status">…</p>
+      <div class="greeting">
+        <p class="hello">Xin chào, mình là <span class="wake-name">Mimi</span></p>
+        <h2>Hôm nay mình giúp gì cho bạn?</h2>
+        <details class="howto-mini">
+          <summary>Cách dùng</summary>
+          <p>Bấm nút sóng âm để bật <b>Rảnh tay</b>, rồi gọi "<span class="wake-name">Mimi</span> ơi", "hey <span class="wake-name">Mimi</span>"…
+            Đọc xong vẫn hỏi tiếp được vài giây mà không cần gọi tên. Hoặc gõ vào ô bên dưới.
+            Giữ <kbd>Space</kbd> để nói, <kbd>Esc</kbd> để dừng.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <ol id="chat" class="chat" aria-live="polite"></ol>
+
+  <div class="bottom">
+    <p id="echo-hint" class="hint center warn" hidden>Đang dùng loa ngoài thì bật <b>Khử vọng</b> ở tab Chi tiết
+      (hoặc dùng tai nghe), để mic không thu lại tiếng Mimi.</p>
+    <p id="mimi-error" class="error center" hidden></p>
+    <form id="composer" class="composer" autocomplete="off">
+      <input id="mimi-input" type="text" enterkeyhint="send" placeholder="Hỏi Mimi điều gì đó…" disabled>
+      <button id="mimi-stop" type="button" class="icon-btn" disabled title="Dừng nghĩ / dừng đọc (Esc)" aria-label="Dừng">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+      </button>
+      <button id="hf-toggle" type="button" class="icon-btn wave" disabled title="Rảnh tay: mic luôn nghe, gọi tên để hỏi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2M7 8v8M11 4v16M15 8v8M19 10v4" fill="none" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="label">Rảnh tay</span>
+      </button>
+    </form>
   </div>
-  <div class="dock">
-    <button id="hf-toggle" class="pill" disabled title="Mic luôn nghe, gọi tên để hỏi">🎙 Rảnh tay</button>
-    <button id="mimi-stop" class="pill secondary" disabled title="Dừng nghĩ / dừng đọc (Esc)">⏹ Dừng</button>
-  </div>
-  <p class="hint center">Bật <b>Rảnh tay</b> rồi gọi "<span class="wake-name">Mimi</span> ơi", "hey <span class="wake-name">Mimi</span>"…
-    Đọc xong vẫn hỏi tiếp được vài giây mà không cần gọi tên. Giữ <kbd>Space</kbd> để nói như cũ, <kbd>Esc</kbd> để dừng.</p>
-  <p id="echo-hint" class="hint center warn" hidden>Đang dùng loa ngoài thì bật <b>Khử vọng</b> ở tab Chi tiết
-    (hoặc dùng tai nghe), để mic không thu lại tiếng Mimi.</p>
-  <p id="mimi-error" class="error center" hidden></p>
 </main>
 
 <main id="tab-detail" class="tab" hidden>
@@ -108,6 +133,11 @@
       <div class="answer-meta"></div>
     </div>
   </li>
+</template>
+
+<template id="msg-tpl">
+  <!-- viết liền một dòng: khoảng trắng giữa thẻ sẽ thành dòng trống trong bong bóng -->
+  <li class="msg mimi"><span class="orb-mini" aria-hidden="true"><i></i></span><div class="bubble"><div class="text"></div><div class="code-wrap" hidden><button type="button" class="copy">Chép</button><pre></pre></div></div></li>
 </template>
 
 <script type="module" src="app.js"></script>

@@ -15,10 +15,9 @@ const ui = {
   learnCount: $("learn-count"), speak: $("speak"), speakStop: $("speak-stop"), speakText: $("speak-text"),
   speakStatus: $("speak-status"), speakSentences: $("speak-sentences"),
   ask: $("ask"), newSession: $("new-session"), bridgeModel: $("bridge-model"), bridgeStatus: $("bridge-status"),
-  orb: $("orb"), orbStatus: $("orb-status"), caption: $("caption"), reply: $("reply"),
-  replyText: document.querySelector("#reply .reply-text"), replyCode: document.querySelector("#reply .reply-code"),
+  orb: $("orb"), orbStatus: $("orb-status"), chat: $("chat"), mimiInput: $("mimi-input"), composer: $("composer"),
   hfToggle: $("hf-toggle"), mimiStop: $("mimi-stop"), echoHint: $("echo-hint"), mimiError: $("mimi-error"),
-  heardLog: $("heard-log"),
+  heardLog: $("heard-log"), chatTpl: $("msg-tpl"),
 };
 
 // ---------- Tab: #mimi (mặc định) / #detail, một trang để dùng chung WebSocket và mic ----------
@@ -53,13 +52,14 @@ function refreshTalkButton() {
   ui.talk.disabled = !(open && mic.ready);
   ui.speak.disabled = !(open && player.tts);
   ui.ask.disabled = !(open && bridge.info);
+  ui.mimiInput.disabled = ui.ask.disabled;
   ui.newSession.disabled = !(open && bridge.info?.kind === "claude_cli");
   ui.bridgeModel.disabled = !open;
   ui.speakStop.disabled = !(player.active || bridge.asking);
   ui.mimiStop.disabled = ui.speakStop.disabled;
   ui.hfToggle.disabled = !(open && mic.ready);
   ui.hfToggle.classList.toggle("on", hf.on);
-  ui.hfToggle.textContent = hf.on ? "🎙 Rảnh tay: bật" : "🎙 Rảnh tay: tắt";
+  ui.hfToggle.querySelector(".label").textContent = hf.on ? "Đang nghe" : "Rảnh tay";
   ui.echoHint.hidden = !(hf.on && player.tts && !audioOptions().echoCancellation);
   renderOrb();
 }
@@ -133,8 +133,7 @@ function onServerMessage(msg) {
       break;
     case "transcript":
       addTurn(msg, performance.now() - turnEndAt);
-      ui.caption.textContent = msg.text;
-      ui.caption.className = "caption";
+      chatUser(msg.text, true);
       break;
     case "answer_start":
       onAnswerStart(msg);
@@ -381,22 +380,78 @@ function onHeard(msg) {
   if (!msg.wake) return;
   stopPlayback(); // gọi tên lúc đang đọc: server đã ngắt, client tắt tiếng ngay
   bridge.asking = false;
-  ui.caption.textContent = msg.text;
-  ui.caption.className = "caption dim";
+  chatUser(msg.text, false);
   if (msg.ack) {
     hf.ackFrom = hf.endAt;
     hf.ackLi = li;
-    showReply(msg.ack);
+    chatReply(msg.ack, "", true);
   }
   refreshTalkButton();
 }
 
-function showReply(text, code = "") {
-  ui.reply.hidden = false;
-  ui.replyText.textContent = text;
-  ui.replyCode.hidden = !code;
-  ui.replyCode.textContent = code;
+// ---------- Hội thoại ở tab Mimi: bong bóng của bạn (phải) và của Mimi (trái) ----------
+
+// pendingUser: bong bóng câu vừa nói, chưa có câu trả lời. Đoạn "heard" (chưa chốt, chữ mờ) được
+// transcript thay bằng bản chốt; câu mới sau đó thành bong bóng mới. reply: bong bóng Mimi đang viết.
+const chat = { pendingUser: null, reply: null };
+const CHAT_MAX = 60;
+
+function chatAppend(li) {
+  const box = ui.chat;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  box.append(li);
+  while (box.children.length > CHAT_MAX) box.firstElementChild.remove();
+  if (atBottom || li.classList.contains("me")) box.scrollTop = box.scrollHeight;
 }
+
+function chatUser(text, final) {
+  if (!text) return;
+  let li = chat.pendingUser;
+  if (!li || li.dataset.final) {
+    li = document.createElement("li");
+    li.className = "msg me";
+    li.append(document.createElement("div"));
+    li.firstChild.className = "bubble";
+    chatAppend(li);
+    chat.pendingUser = li;
+  }
+  li.firstChild.textContent = text;
+  li.classList.toggle("dim", !final);
+  if (final) li.dataset.final = "1";
+}
+
+// fresh: mở bong bóng mới (lượt trả lời mới); không thì cập nhật bong bóng đang viết
+function chatReply(text, code = "", fresh = false) {
+  if (fresh || !chat.reply) {
+    const li = ui.chatTpl.content.firstElementChild.cloneNode(true);
+    chat.reply = li;
+    chat.pendingUser = null;
+    chatAppend(li);
+  }
+  const li = chat.reply;
+  li.querySelector(".text").textContent = text;
+  li.querySelector(".code-wrap").hidden = !code;
+  li.querySelector("pre").textContent = code;
+  const box = ui.chat;
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+}
+
+ui.chat.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".copy");
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.parentElement.querySelector("pre").textContent);
+    btn.textContent = "Đã chép";
+  } catch {
+    btn.textContent = "Không chép được"; // clipboard cần HTTPS hoặc localhost
+  }
+  setTimeout(() => (btn.textContent = "Chép"), 1500);
+});
+
+ui.composer.addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (askNow(ui.mimiInput.value.trim())) ui.mimiInput.value = "";
+});
 
 // Orb: off → idle (tắt rảnh tay) / sleep (chờ tên) → listening → thinking → speaking
 function orbState() {
@@ -428,6 +483,7 @@ const outLevel = new Float32Array(512);
 function renderOrb() {
   const s = orbState();
   ui.orb.className = `orb ${s}`;
+  if (document.body.dataset.orb !== s) document.body.dataset.orb = s; // màu nền ở đáy đổi theo orb
   ui.orbStatus.textContent = orbStatus(s);
   let level = 0;
   if (s === "listening") level = mic.level;
@@ -604,7 +660,7 @@ function finishPlayback() {
 
 ui.speak.onclick = speakNow;
 ui.speakStop.onclick = stopSpeaking;
-ui.ask.onclick = askNow;
+ui.ask.onclick = () => askNow();
 ui.newSession.onclick = () => send({ type: "new_session" });
 ui.bridgeModel.onchange = () => send({ type: "set_model", model: ui.bridgeModel.value });
 ui.speakText.addEventListener("keydown", (e) => {
@@ -636,14 +692,15 @@ function fillModels(b) {
   if (models.length) ui.bridgeModel.value = b.model ?? "";
 }
 
-function askNow() {
-  const text = ui.speakText.value.trim();
-  if (!text || ui.ask.disabled) return;
+// Trả về true nếu đã gửi (để ô nhập ở tab Mimi xoá chữ)
+function askNow(text = ui.speakText.value.trim()) {
+  if (!text || ui.ask.disabled) return false;
   stopPlayback();
   ensurePlayer();
   bridge.startedAt = performance.now();
   bridge.pendingTurn = null;
   send({ type: "ask", text });
+  return true;
 }
 
 function onAnswerStart(msg) {
@@ -656,6 +713,7 @@ function onAnswerStart(msg) {
     box.value = msg.question;
     box.readOnly = true;
     ui.history.prepend(el);
+    chatUser(msg.question, true);
   } else {
     bridge.startedAt = turnEndAt; // lượt nói: đo từ lúc thả phím / ngừng nói
   }
@@ -665,7 +723,7 @@ function onAnswerStart(msg) {
   if (msg.speak_id !== null) player.clickedAt = bridge.startedAt;
   el.querySelector(".answer").hidden = false;
   el.querySelector(".answer-meta").textContent = "Claude đang trả lời…";
-  showReply("");
+  chatReply("", "", true); // bong bóng trống hiện dấu "…" đang gõ
   refreshTalkButton();
 }
 
@@ -680,7 +738,7 @@ function onAnswerDelta(msg) {
   const code = cur.el.querySelector(".answer-code");
   code.hidden = i < 0;
   code.textContent = codeText;
-  showReply(text, codeText);
+  chatReply(text, codeText);
 }
 
 // Lệnh giọng nói (mở session mới / dừng / đọc lại): server tự chạy, không hỏi Claude
@@ -695,7 +753,7 @@ function onCommand(msg) {
     el.querySelector(".answer-meta").textContent = `lệnh: ${label}`;
   }
   if (msg.name === "stop") stopPlayback();
-  if (msg.reply) showReply(msg.reply);
+  if (msg.reply) chatReply(msg.reply, "", true);
   refreshTalkButton();
 }
 
@@ -706,7 +764,7 @@ function onAnswerEnd(msg) {
   cur.end = msg;
   if (msg.error) {
     cur.el.querySelector(".answer-text").textContent += `\n[lỗi] ${msg.error}`;
-    ui.replyText.textContent += `\n[lỗi] ${msg.error}`;
+    if (chat.reply) chat.reply.querySelector(".text").textContent += `\n[lỗi] ${msg.error}`;
   }
   if (msg.session_id !== undefined && bridge.info) showBridge(msg.session_id);
   renderAnswerMeta(cur);

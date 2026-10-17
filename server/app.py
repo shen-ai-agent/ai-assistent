@@ -116,8 +116,18 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         await Session(ws, app, cfg).run()
 
     if WEB_DIR.exists():
-        app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+        app.mount("/", NoCacheStatic(directory=WEB_DIR, html=True), name="web")
     return app
+
+
+class NoCacheStatic(StaticFiles):
+    """Web không có bước build nên tên file không đổi theo phiên bản: bắt trình duyệt hỏi lại server
+    (ETag, file không đổi thì 304), để sửa CSS/JS xong tải lại trang là thấy ngay, kể cả trên điện thoại."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
 
 class Session:
