@@ -20,6 +20,7 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 .venv/Scripts/python bench/stt_bench.py --compare             # bảng so sánh kết quả đã lưu
 .venv/Scripts/python bench/stt_bench.py --rescore [--with-corrections]  # chấm lại, không cần GPU
 .venv/Scripts/python -m server > _local/server.log 2>&1      # voice server (chạy nền), http://127.0.0.1:8765
+./start.bat                                                   # người dùng: server + tự mở trình duyệt (= python -m server --open)
 .venv/Scripts/python bench/ws_client.py --limit 20            # đẩy audio testset qua /ws, server phải đang chạy
 .venv/Scripts/python bench/suggest_corrections.py             # đề xuất học từ log (giống trang /learn.html)
 .venv/Scripts/python bench/build_personal_set.py              # bộ test cá nhân _local/personal, chạy với stt_bench.py --testset

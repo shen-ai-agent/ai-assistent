@@ -219,7 +219,7 @@ AI-assistent/
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
 - [ ] ~~Fine-tune STT~~ → chuyển sang Phase 8 (tự học dài hạn), làm khi đủ audio đã sửa
 - [ ] Chỉnh tốc độ đọc, nút "đọc lại", "đọc chậm"
-- [ ] Script khởi động 1 lệnh (server + mở web)
+- [x] Script khởi động 1 lệnh (server + mở web): `start.bat` = `python -m server --open`; server đã chạy thì chỉ mở trình duyệt (18/10/2026, chưa bấm đúp thử)
 
 ### DoD
 - [ ] Mỗi mục được làm có số liệu trước/sau (term recall, độ trễ, hoặc điểm cảm nhận)

@@ -47,8 +47,11 @@ Các cấu hình nằm trong `bench/stt_configs.toml`. Kết quả lưu ở `_lo
 ## Voice server (Phase 2)
 
 ```powershell
-.venv\Scripts\python -m server
+.\start.bat                          # hoặc bấm đúp start.bat: chạy server, nạp model xong tự mở trình duyệt
+.venv\Scripts\python -m server       # chỉ chạy server
 ```
+
+`start.bat` (tức `python -m server --open`) thấy server đã chạy sẵn thì chỉ mở trình duyệt, không nạp model lần hai. Đóng cửa sổ là tắt server.
 
 Mở http://127.0.0.1:8765, cho phép dùng micro, rồi **giữ Space** (hoặc giữ nút tròn) để nói và thả ra để nhận transcript. Bấm `Esc` để huỷ.
 
