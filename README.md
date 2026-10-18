@@ -68,7 +68,14 @@ MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
   -addext "subjectAltName=IP:192.168.1.199,DNS:localhost,IP:127.0.0.1" -addext "extendedKeyUsage=serverAuth"
 ```
 
-Trên điện thoại mở `https://192.168.1.199:8766`. Lần đầu trình duyệt cảnh báo chứng chỉ: chọn "Nâng cao" → "Tiếp tục truy cập". Đổi IP máy thì tạo lại chứng chỉ. Cổng này **không có đăng nhập**: máy nào trong mạng LAN cũng dùng được, đừng port-forward ra Internet. Không có chứng chỉ thì server chỉ chạy cổng 8765 như cũ.
+Trên điện thoại mở `https://192.168.1.199:8766`. Lần đầu trình duyệt cảnh báo chứng chỉ: chọn "Nâng cao" → "Tiếp tục truy cập". Đổi IP máy thì tạo lại chứng chỉ (và cài lại trên điện thoại nếu đã cài).
+
+**Cài thành app (PWA).** Chỉ bấm "Tiếp tục truy cập" thì vẫn dùng được, nhưng Chrome không cho cài app. Phải cho điện thoại tin chứng chỉ:
+
+- Android: mở `https://192.168.1.199:8766/lan.crt` để tải về, rồi Cài đặt → Bảo mật → Mã hoá và thông tin xác thực → Cài đặt chứng chỉ → **Chứng chỉ CA**, chọn `mimi-lan.crt` (tên mục khác nhau tuỳ hãng). Đóng hẳn Chrome, mở lại trang, menu ⋮ → **Cài đặt ứng dụng** / **Thêm vào màn hình chính**.
+- iPhone: mở link trên bằng Safari → Cài đặt → Đã tải về hồ sơ → Cài đặt; rồi Cài đặt → Cài đặt chung → Giới thiệu → Cài đặt tin cậy chứng nhận → bật cho "Voice Study Assistant". Trong Safari bấm Chia sẻ → **Thêm vào MH chính**.
+
+Chứng chỉ này chỉ dùng cho server ở nhà; khoá riêng `lan.key` không rời máy tính, đừng gửi file đó cho ai. Khi đang rảnh tay, chờ Claude hoặc đang đọc, web giữ màn hình sáng (Wake Lock); tắt màn hình hay chuyển app thì điện thoại vẫn treo mic. Cổng này **không có đăng nhập**: máy nào trong mạng LAN cũng dùng được, đừng port-forward ra Internet. Không có chứng chỉ thì server chỉ chạy cổng 8765 như cũ.
 
 ### Đề xuất học (T-007)
 

@@ -17,7 +17,8 @@ from contextlib import aclosing, asynccontextmanager
 from typing import AsyncIterator, Callable
 
 import numpy as np
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import protocol as P
@@ -107,6 +108,14 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         bridge = app.state.bridge
         return {"status": "ok", "model": cfg.model, "topics": app.state.stt.topics(),
                 "tts": app.state.tts is not None, "bridge": bridge.name if bridge else None}
+
+    @app.get("/lan.crt")
+    async def lan_cert():
+        """Chứng chỉ tự ký của cổng LAN (không kèm khoá), để điện thoại tải về cài làm CA.
+        Có tin chứng chỉ thì Chrome mới chạy service worker và cho cài PWA."""
+        if not cfg.lan_cert.exists():
+            raise HTTPException(404, "Chưa tạo chứng chỉ LAN")
+        return FileResponse(cfg.lan_cert, media_type="application/x-x509-ca-cert", filename="mimi-lan.crt")
 
     app.include_router(learn_router)
 

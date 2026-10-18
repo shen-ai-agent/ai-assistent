@@ -262,8 +262,9 @@ AI-assistent/
 - [ ] Bước 2 (nếu thật sự cần public) — Cloudflare Tunnel + Cloudflare Access (đăng nhập bằng email), không mở port router
 - [ ] Bắt buộc **xác thực** trước WebSocket: server gọi được Claude và chạy GPU, để lộ là bị dùng chùa
 - [ ] Rate limit + giới hạn độ dài audio mỗi lượt
-- [ ] Web trên điện thoại: nút giữ để nói, phát audio sau lần chạm đầu tiên (chính sách autoplay của iOS/Android), màn hình không tắt khi đang nói
-- [ ] PWA: cài lên màn hình chính như một app
+- [ ] Web trên điện thoại: nút giữ để nói, phát audio sau lần chạm đầu tiên (chính sách autoplay của iOS/Android)
+- [x] Màn hình không tắt khi đang rảnh tay / chờ Claude / đang đọc (Wake Lock, 18/10/2026)
+- [x] PWA: `web/manifest.json`, icon, `web/sw.js` (chỉ hiện `offline.html` khi mất kết nối, không cache CSS/JS); qua cổng 8766 cần cài `/lan.crt` làm CA trên điện thoại (18/10/2026)
 - [ ] Audio qua mạng: nén (Opus) thay vì PCM thô nếu mạng 4G chậm
 - [ ] Server tự chạy khi bật máy (Windows service / Task Scheduler)
 
@@ -320,5 +321,5 @@ AI-assistent/
 | 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
 | 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền |
 | 6 | Giọng của chính mình | ⬜ |
-| 7 | Dùng từ mọi thiết bị | 🟡 17/10/2026 — dùng được trong LAN qua HTTPS 8766; từ xa (4G) chưa làm |
+| 7 | Dùng từ mọi thiết bị | 🟡 18/10/2026 — dùng được trong LAN qua HTTPS 8766, có PWA + giữ màn hình sáng; từ xa (4G) chưa làm |
 | 8 | Tự học dài hạn | 🟡 17/10/2026 — có kế hoạch; lexicon thêm TODO, README, PLAN.md… |

@@ -65,6 +65,7 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
   - `handsfree.py`: `HandsFree` một phiên, SLEEP/ACTIVE/BUSY. Mọi mốc thời gian theo `seg.pos` (mẫu mic), không theo đồng hồ, nên test chỉ cần đẩy PCM (`tests/test_assistant.py`, VAD giả qua `vad_factory`). Test phải đẩy đủ im lặng sau `speak_end` thì cửa sổ ACTIVE mới mở. Tên trợ lý không đưa vào `initial_prompt`; câu đáp không chứa tên.
   - Test phải trỏ `Config(glossary=..., corrections=...)` và `L.TESTSET`/`L.BASELINE_RUN` vào `tmp_path` để không ghi vào `data/` thật (`tests/test_learning.py`).
 - `web/`: HTML/JS thuần, không có bước build. `capture-worklet.js` resample mic về PCM 16kHz, frame 100ms.
+  - PWA: `manifest.json`, `icons/` (PNG xuất từ `icon.svg`), `sw.js`. Service worker chỉ trả `offline.html` khi mở trang lỗi mạng; đừng cache CSS/JS (server gửi `no-cache` để sửa là thấy ngay).
 - `bench/`: `record.py` (ghi bộ test), `stt_bench.py`, `stt_configs.toml` (mỗi bảng TOML là một cấu hình), `ws_client.py` (chấm server qua WebSocket), `build_personal_set.py`, `suggest_corrections.py`, `tts_bench.py` + `tts_samples.txt` (35 đoạn clean/term/dirty/en), `tts_ws_client.py`, `claude_ws_client.py`, `wake_bench.py` (+ `data/wake_phrases.tsv`: nhóm `name`/`ask`/`near`; `record.py --ambient` ghi âm nền vào `_local/wake_ambient/`).
 - `prompts/voice_reply.md`: instruction văn nói cho Claude, khớp với marker `---CODE---` của normalize.
 - `data/glossary.txt`: dòng `[*]Thuật ngữ | alias...`, chia chủ đề bằng `# ---------- Tên ----------`. `*` = ưu tiên, đưa vào prompt mặc định.

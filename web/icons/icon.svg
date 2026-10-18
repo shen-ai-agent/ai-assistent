@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Icon app Mimi: orb giống tab Mimi. Orb nằm trong vùng an toàn 80% để dùng được cả làm icon maskable -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="58%" r="70%">
+      <stop offset="0" stop-color="#1d1846"/>
+      <stop offset="1" stop-color="#0d0f14"/>
+    </radialGradient>
+    <radialGradient id="core" cx="50%" cy="42%" r="58%">
+      <stop offset="0" stop-color="#0a0c16"/>
+      <stop offset=".72" stop-color="#151a3a"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="1.6"/></filter>
+    <clipPath id="ball"><circle cx="256" cy="256" r="150"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="262" r="168" fill="#7c5cff" opacity=".5" filter="url(#glow)"/>
+  <circle cx="256" cy="256" r="150" fill="url(#core)"/>
+  <g clip-path="url(#ball)" fill="none" stroke-linecap="round" filter="url(#soft)">
+    <ellipse cx="256" cy="256" rx="150" ry="56" transform="rotate(-24 256 256)" stroke="url(#ribbon)" stroke-width="7" opacity=".95"/>
+    <ellipse cx="256" cy="256" rx="142" ry="92" transform="rotate(34 256 256)" stroke="#c4b5fd" stroke-width="4" opacity=".7"/>
+    <ellipse cx="256" cy="256" rx="120" ry="38" transform="rotate(82 256 256)" stroke="#93c5fd" stroke-width="3" opacity=".55"/>
+  </g>
+  <circle cx="256" cy="256" r="149" fill="none" stroke="#bfdbfe" stroke-opacity=".45" stroke-width="3"/>
+  <ellipse cx="212" cy="186" rx="46" ry="20" transform="rotate(-32 212 186)" fill="#ffffff" opacity=".13"/>
+</svg>

@@ -1003,8 +1003,10 @@ Server → Client
   <ul class="tasks">
     <li><label><input type="checkbox"><span class="t">Nút lớn giữ để nói (touch events), tránh cuộn trang khi đang giữ</span></label></li>
     <li><label><input type="checkbox"><span class="t">Mở khoá audio ở lần chạm đầu tiên (chính sách autoplay của iOS/Android)</span></label></li>
-    <li><label><input type="checkbox"><span class="t">Giữ màn hình sáng khi đang nói/đọc (Wake Lock API)</span></label></li>
-    <li><label><input type="checkbox"><span class="t">PWA: manifest + icon, cài lên màn hình chính như một app</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Giữ màn hình sáng khi đang nói/đọc (Wake Lock API)</span></label>
+      <div class="hint">18/10/2026. Giữ khi đang rảnh tay, đang chờ Claude hoặc đang đọc; trang bị ẩn thì trình duyệt tự nhả, hiện lại thì xin lại.</div></li>
+    <li><label><input type="checkbox" checked><span class="t">PWA: manifest + icon, cài lên màn hình chính như một app</span></label>
+      <div class="hint">18/10/2026. <code>web/manifest.json</code>, icon trong <code>web/icons/</code>, <code>web/sw.js</code> chỉ hiện <code>offline.html</code> khi không tới được server (không cache CSS/JS). Chrome headless: không có lỗi installability. Cổng 8766 dùng chứng chỉ tự ký: điện thoại phải cài <code>/lan.crt</code> làm CA thì mới cài được app.</div></li>
     <li><label><input type="checkbox"><span class="t">Nén audio (Opus/WebM) thay cho PCM thô khi dùng 4G, server giải nén bằng ffmpeg</span></label></li>
   </ul>
   <h4>C. Vận hành</h4>

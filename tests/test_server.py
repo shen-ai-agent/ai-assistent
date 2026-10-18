@@ -51,6 +51,26 @@ def test_health(setup):
     assert body["status"] == "ok" and "AWS" in body["topics"]
 
 
+def test_pwa_files(setup):
+    client, _, _ = setup
+    manifest = client.get("/manifest.json").json()
+    assert manifest["display"] == "standalone"
+    for icon in manifest["icons"]:
+        assert client.get("/" + icon["src"]).status_code == 200
+    sw = client.get("/sw.js")
+    assert sw.status_code == 200 and "javascript" in sw.headers["content-type"]
+    assert client.get("/offline.html").status_code == 200
+
+
+def test_lan_cert(tmp_path):
+    cfg = Config(log_dir=tmp_path / "logs", lan_cert=tmp_path / "lan.crt")
+    with TestClient(create_app(cfg, engine_factory=lambda _cfg: FakeEngine())) as client:
+        assert client.get("/lan.crt").status_code == 404
+        (tmp_path / "lan.crt").write_text("-----BEGIN CERTIFICATE-----\n")
+        resp = client.get("/lan.crt")
+        assert resp.status_code == 200 and resp.headers["content-type"] == "application/x-x509-ca-cert"
+
+
 def test_turn_with_topic(setup):
     client, engine, cfg = setup
     with client.websocket_connect("/ws") as ws:

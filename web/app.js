@@ -62,7 +62,30 @@ function refreshTalkButton() {
   ui.hfToggle.querySelector(".label").textContent = hf.on ? "Đang nghe" : "Rảnh tay";
   ui.echoHint.hidden = !(hf.on && player.tts && !audioOptions().echoCancellation);
   renderOrb();
+  syncWakeLock();
 }
+
+// Giữ màn hình sáng khi đang rảnh tay, đang chờ Claude hoặc đang đọc: màn hình tắt thì trình duyệt điện thoại
+// treo mic và audio. Trình duyệt tự nhả khoá khi trang bị ẩn, hiện lại thì xin lại.
+const wake = { lock: null, pending: false };
+async function syncWakeLock() {
+  if (!("wakeLock" in navigator) || wake.pending) return;
+  const want = (hf.on || player.active || bridge.asking) && !document.hidden;
+  if (want && !wake.lock) {
+    wake.pending = true;
+    try {
+      wake.lock = await navigator.wakeLock.request("screen");
+      wake.lock.addEventListener("release", () => { wake.lock = null; });
+    } catch { /* hết pin, chế độ tiết kiệm…: bỏ qua */ }
+    wake.pending = false;
+    syncWakeLock(); // trạng thái có thể đã đổi trong lúc chờ
+  } else if (!want && wake.lock) {
+    const lock = wake.lock;
+    wake.lock = null;
+    lock.release();
+  }
+}
+document.addEventListener("visibilitychange", syncWakeLock);
 
 function showError(text) {
   ui.error.textContent = ui.mimiError.textContent = text;
@@ -825,3 +848,5 @@ orbLoop();
 connect();
 startMic();
 refreshLearnCount();
+// PWA: cần HTTPS có chứng chỉ được tin (hoặc localhost); chứng chỉ tự ký chưa cài lên máy thì đăng ký thất bại
+navigator.serviceWorker?.register("sw.js").catch((e) => console.warn("service worker:", e.message));
