@@ -416,8 +416,17 @@ function onHeard(msg) {
 
 // pendingUser: bong bóng câu vừa nói, chưa có câu trả lời. Đoạn "heard" (chưa chốt, chữ mờ) được
 // transcript thay bằng bản chốt; câu mới sau đó thành bong bóng mới. reply: bong bóng Mimi đang viết.
-const chat = { pendingUser: null, reply: null };
+// follow: còn cuộn theo Mimi; người dùng tự cuộn (lăn chuột, vuốt) thì thôi, cuộn về cuối thì theo lại.
+const chat = { pendingUser: null, reply: null, follow: true };
 const CHAT_MAX = 60;
+
+const stopFollow = () => (chat.follow = false);
+ui.chat.addEventListener("wheel", stopFollow, { passive: true });
+ui.chat.addEventListener("touchmove", stopFollow, { passive: true });
+ui.chat.addEventListener("scroll", () => {
+  const box = ui.chat;
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 40) chat.follow = true;
+});
 
 function chatAppend(li) {
   const box = ui.chat;
@@ -443,20 +452,80 @@ function chatUser(text, final) {
   if (final) li.dataset.final = "1";
 }
 
-// fresh: mở bong bóng mới (lượt trả lời mới); không thì cập nhật bong bóng đang viết
-function chatReply(text, code = "", fresh = false) {
+// fresh: mở bong bóng mới (lượt trả lời mới); không thì cập nhật bong bóng đang viết.
+// speakId: lượt đọc của câu trả lời này, để tô câu đang đọc (onSpeakMore / onSpeakSentence).
+function chatReply(text, code = "", fresh = false, speakId = null) {
   if (fresh || !chat.reply) {
     const li = ui.chatTpl.content.firstElementChild.cloneNode(true);
+    Object.assign(li, { speakId, sents: [], now: -1 });
     chat.reply = li;
     chat.pendingUser = null;
+    chat.follow = true;
     chatAppend(li);
   }
   const li = chat.reply;
-  li.querySelector(".text").textContent = text;
+  // Claude tách đoạn bằng dòng trống; trong bong bóng chỉ cần xuống dòng
+  li.raw = text.replace(/\n\s*\n/g, "\n");
+  renderReplyText(li);
   li.querySelector(".code-wrap").hidden = !code;
   li.querySelector("pre").textContent = code;
+  revealReply(li);
+}
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Câu TTS đã nhận (li.sents, theo thứ tự) bọc trong <span class="sent">, tìm lần lượt trong text,
+// bỏ qua khác biệt khoảng trắng. Câu không tìm thấy (normalize đã đổi chữ) thì không tô.
+function renderReplyText(li) {
+  const text = li.raw;
+  const nodes = [];
+  let pos = 0;
+  li.sents.forEach((src, i) => {
+    const words = src.trim().split(/\s+/).filter(Boolean).map(escapeRe);
+    if (!words.length) return;
+    const re = new RegExp(words.join("\\s+"), "g");
+    re.lastIndex = pos;
+    const m = re.exec(text);
+    if (!m) return;
+    if (m.index > pos) nodes.push(text.slice(pos, m.index));
+    const span = document.createElement("span");
+    span.className = "sent";
+    span.dataset.i = i;
+    span.classList.toggle("now", i === li.now);
+    span.textContent = m[0];
+    nodes.push(span);
+    pos = m.index + m[0].length;
+  });
+  if (pos < text.length) nodes.push(text.slice(pos)); // không để text node rỗng, giữ :empty cho dấu "…"
+  li.querySelector(".text").replaceChildren(...nodes);
+}
+
+// Chữ đang stream: cuộn theo cho tới khi đầu bong bóng chạm mép trên, sau đó đứng yên để đọc
+function revealReply(li) {
+  if (!chat.follow) return;
   const box = ui.chat;
-  if (box.scrollHeight - box.scrollTop - box.clientHeight < 160) box.scrollTop = box.scrollHeight;
+  const top = box.scrollTop + li.getBoundingClientRect().top - box.getBoundingClientRect().top - 8;
+  const target = Math.min(box.scrollHeight - box.clientHeight, top);
+  if (target > box.scrollTop) box.scrollTop = target;
+}
+
+// Tô câu thứ i của bong bóng đang đọc (-1: bỏ tô), cuộn tới câu đó nếu nó ra ngoài khung nhìn
+function highlightReply(speakId, i) {
+  const li = chat.reply;
+  if (!li || li.speakId !== speakId) return;
+  li.now = i;
+  let cur = null;
+  for (const s of li.querySelectorAll(".sent")) {
+    const on = Number(s.dataset.i) === i;
+    s.classList.toggle("now", on);
+    if (on) cur = s;
+  }
+  if (!cur || !chat.follow) return;
+  const box = ui.chat.getBoundingClientRect();
+  const r = cur.getBoundingClientRect();
+  if (r.top < box.top + 8 || r.bottom > box.bottom - 8) {
+    ui.chat.scrollTo({ top: ui.chat.scrollTop + r.top - box.top - box.height / 3, behavior: "smooth" });
+  }
 }
 
 ui.chat.addEventListener("click", async (e) => {
@@ -568,6 +637,7 @@ function stopSpeaking() {
 function stopPlayback() {
   for (const src of player.sources) src.stop();
   player.sources.clear();
+  highlightReply(player.id, -1);
   player.id = -1; // bỏ mọi frame còn trên đường tới
   player.active = false;
   for (const x of player.items) x.classList.remove("now");
@@ -607,6 +677,11 @@ function onSpeakMore(msg) {
     ui.speakSentences.append(li);
     player.items.push(li);
   }
+  const reply = chat.reply;
+  if (reply?.speakId === msg.speak_id) {
+    reply.sents.push(...msg.sentences.map((s) => s.source));
+    renderReplyText(reply);
+  }
 }
 
 function onSpeakSentence(msg) {
@@ -618,6 +693,7 @@ function onSpeakSentence(msg) {
   setTimeout(() => {
     if (msg.speak_id !== player.id) return;
     for (const x of player.items) x.classList.toggle("now", x === li);
+    highlightReply(msg.speak_id, msg.index);
   }, delay * 1000);
 }
 
@@ -678,6 +754,7 @@ function onSpeakEnd(msg) {
 function finishPlayback() {
   player.active = false;
   for (const x of player.items) x.classList.remove("now");
+  highlightReply(player.id, -1);
   refreshTalkButton();
 }
 
@@ -746,7 +823,7 @@ function onAnswerStart(msg) {
   if (msg.speak_id !== null) player.clickedAt = bridge.startedAt;
   el.querySelector(".answer").hidden = false;
   el.querySelector(".answer-meta").textContent = "Claude đang trả lời…";
-  chatReply("", "", true); // bong bóng trống hiện dấu "…" đang gõ
+  chatReply("", "", true, msg.speak_id); // bong bóng trống hiện dấu "…" đang gõ
   refreshTalkButton();
 }
 
@@ -787,7 +864,10 @@ function onAnswerEnd(msg) {
   cur.end = msg;
   if (msg.error) {
     cur.el.querySelector(".answer-text").textContent += `\n[lỗi] ${msg.error}`;
-    if (chat.reply) chat.reply.querySelector(".text").textContent += `\n[lỗi] ${msg.error}`;
+    if (chat.reply) {
+      chat.reply.raw += `\n[lỗi] ${msg.error}`;
+      renderReplyText(chat.reply);
+    }
   }
   if (msg.session_id !== undefined && bridge.info) showBridge(msg.session_id);
   renderAnswerMeta(cur);

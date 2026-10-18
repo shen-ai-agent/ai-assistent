@@ -190,6 +190,11 @@ body:not([data-orb]) .aura, #tab-mimi[hidden] .aura { display: none; }
 .msg.mimi .orb-mini { width: 26px; height: 26px; margin-bottom: 4px; }
 .msg.mimi .bubble { background: rgba(23, 26, 34, .85); border: 1px solid var(--line); border-radius: 20px 20px 20px 6px;
   backdrop-filter: blur(8px); }
+/* Câu Mimi đang đọc: tô nền, các câu khác mờ đi một chút cho dễ dò theo */
+.msg.mimi .text:has(.sent.now) { color: #9aa3b5; }
+.msg.mimi .sent { border-radius: 4px; transition: background-color .2s, color .2s; box-decoration-break: clone;
+  -webkit-box-decoration-break: clone; }
+.msg.mimi .sent.now { color: var(--text); background: rgba(99, 102, 241, .28); }
 .msg.mimi .text:empty::before { content: "•••"; letter-spacing: 3px; color: var(--muted); animation: typing 1.2s ease-in-out infinite; }
 .msg .code-wrap { position: relative; margin-top: 10px; white-space: normal; }
 .msg pre { margin: 0; background: #07090d; border: 1px solid var(--line); border-radius: 12px; padding: 34px 12px 12px;
