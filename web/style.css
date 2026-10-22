@@ -108,8 +108,8 @@ body[data-orb="error"] { --a: 220, 38, 38; --b: 248, 113, 113; --c: 254, 202, 20
   padding: 0 16px; }
 /* Vệt sáng ở đáy màn hình, thở chậm, đổi màu theo trạng thái */
 .aura { position: fixed; z-index: -1; left: 50%; bottom: -30vh; width: 160vw; height: 70vh; transform: translateX(-50%);
-  border-radius: 50%; pointer-events: none; filter: blur(60px); opacity: .55;
-  background: radial-gradient(closest-side, rgba(var(--b), .55), rgba(var(--a), .25) 55%, transparent);
+  border-radius: 50%; pointer-events: none; opacity: .55;
+  background: radial-gradient(closest-side, rgba(var(--b), .5), rgba(var(--a), .22) 45%, rgba(var(--a), .07) 75%, transparent);
   transition: background 1s; animation: aura calc(7s / var(--speed)) ease-in-out infinite alternate; }
 body:not([data-orb]) .aura, #tab-mimi[hidden] .aura { display: none; }
 @keyframes aura { from { transform: translateX(-50%) scale(1); opacity: .45; } to { transform: translateX(-52%) scale(1.08); opacity: .7; } }
@@ -117,17 +117,28 @@ body:not([data-orb]) .aura, #tab-mimi[hidden] .aura { display: none; }
 /* ---------- Orb: lõi tối, dải sáng xoay và nhoè liên tục ---------- */
 .orb { --level: 0; position: relative; flex: none; width: 190px; height: 190px;
   transform: scale(calc(1 + var(--level) * .12)); transition: transform .1s linear, width .5s, height .5s; }
-.orb .halo { position: absolute; inset: -38%; border-radius: 50%; filter: blur(24px);
-  background: radial-gradient(closest-side, rgba(var(--a), .45), rgba(var(--a), .12) 60%, transparent);
+/* Halo không dùng filter: blur: Safari iOS cắt vùng nhoè của phần tử có animation thành khung vuông.
+   Gradient tự mờ dần nên không cần blur. */
+.orb .halo { position: absolute; inset: -38%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(var(--a), .4), rgba(var(--a), .14) 45%, rgba(var(--a), .04) 75%, transparent);
   animation: halo calc(5s / var(--speed)) ease-in-out infinite alternate; transition: background 1s; }
-.orb .sphere { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; isolation: isolate;
+/* Quầng sáng ngoài nằm ở lớp riêng: .sphere bị mask cắt tròn nên box-shadow ngoài của nó sẽ mất */
+.orb::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: 0 0 calc(30px + var(--level) * 50px) rgba(var(--a), .45); transition: box-shadow 1s; }
+/* Safari không cắt con có animation/filter theo overflow + border-radius (lòi khung vuông);
+   mask-image ép cắt tròn thật */
+.orb .sphere { position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 99%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, #000 99%, transparent 100%);
   background: radial-gradient(circle at 50% 48%, #01030a 52%, #071233 100%);
-  box-shadow: 0 0 calc(30px + var(--level) * 50px) rgba(var(--a), .45), inset 0 0 22px rgba(var(--b), .45); }
+  box-shadow: inset 0 0 22px rgba(var(--b), .45); }
 .orb .sphere::after { content: ""; position: absolute; inset: 0; border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgba(var(--c), .35), inset -14px -6px 30px rgba(var(--b), .65), inset -3px 0 8px rgba(var(--c), .5),
     inset 10px 12px 26px rgba(var(--a), .15); }
 /* Dải sáng: viền elip mảnh, phát sáng, vừa xoay vừa co giãn (giống dải lụa uốn trong quả cầu) */
-:where(.orb .sphere i) { position: absolute; border-radius: 50%; mix-blend-mode: screen; border: 2px solid transparent;
+/* Không dùng mix-blend-mode: Safari iOS tô đen cả khung chữ nhật quanh vùng filter của phần tử blend + animation.
+   Lõi gần đen nên hoà trộn thường trông gần như screen. */
+:where(.orb .sphere i) { position: absolute; border-radius: 50%; border: 2px solid transparent;
   transition: border-color 1s, box-shadow 1s; }
 .orb .fog { inset: -25%; border: none !important; filter: blur(16px); opacity: .65;
   background: conic-gradient(from 0deg, transparent 0 40%, rgba(var(--a), .9) 60%, rgba(var(--b), .7) 72%, transparent 88%);
