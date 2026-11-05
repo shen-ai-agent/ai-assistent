@@ -58,6 +58,32 @@ active_silence_ms = 900
 active_timeout_s = 8
 follow_up_s = 6           # 0 = lần nào cũng phải gọi tên
 
+[agent]
+# Giao việc cho VS Code (T-011): "mở dự án job hay rồi thêm phân trang..." → mở VS Code ở thư mục dự án,
+# đưa yêu cầu vào ô chat Claude Code, theo dõi log phiên (~/.claude/projects) để báo tiến độ và báo cáo.
+# Biệt danh / loại trừ dự án: _local/projects.toml (exclude = [...], [aliases], [extra]).
+enabled = true
+roots = ["D:/projects", "E:/projects"]
+projects_file = "_local/projects.toml"
+claude_dir = ""           # rỗng = ~/.claude/projects
+code_exe = ""             # rỗng = lệnh `code` trong PATH
+auto_submit = true        # tự nhấn Enter vào ô chat (chỉ khi cửa sổ VS Code đúng dự án đang ở trên cùng)
+window_wait_s = 15        # chờ cửa sổ VS Code hiện ra
+stall_s = 12              # tool chưa xong quá chừng này: báo "chờ duyệt hoặc chạy lâu"
+submit_timeout_s = 600    # chỉ điền sẵn: chờ bạn bấm Enter chừng này
+task_timeout_s = 7200
+log_dir = "_local/tasks"
+
+[study]
+# Tab Học (T-012): dán text hoặc tải .txt/.md/.docx, Mimi đọc hiểu rồi giảng lại từng phần.
+# Mỗi tài liệu một thư mục trong dir (doc.md, meta.json, history.jsonl) và một session Claude riêng.
+# Dùng lệnh claude và model của [bridge].
+dir = "_local/study"
+prompt = "prompts/study_reply.md"
+tools = ["Read", "WebSearch", "WebFetch"]   # Read: đọc doc.md trong thư mục tài liệu
+timeout_s = 300
+max_chars = 200000
+
 [log]
 dir = "_local/logs"
 save_audio = true         # lưu wav từng lượt để benchmark lại audio đi qua trình duyệt

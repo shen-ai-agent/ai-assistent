@@ -20,6 +20,7 @@ DEFAULT_PREFIXES = ("hey", "hay", "he", "hi", "hello", "e", "a", "o", "u", "oi",
 DEFAULT_FILLERS = ("oi", "a", "ah", "ne", "nhe", "nha", "o", "e", "hey", "u", "uh", "um")
 
 _WORD = re.compile(r"\w+")
+_PUNCT = re.compile(r"[,.!?;:]")
 
 
 def fold(word: str) -> str:
@@ -58,10 +59,9 @@ class WakeMatcher:
         self.prefixes, self.fillers = {fold(w) for w in prefixes}, {fold(w) for w in fillers}
         self.max_words = max(len(_WORD.findall(v)) for v in [name, *aliases]) + 1  # tên có thể bị tách thêm một từ
 
-    def match(self, text: str) -> WakeMatch:
-        words = list(_WORD.finditer(text))
-        folded = [fold(w.group()) for w in words]
-        best: tuple[float, int, int] | None = None   # (score, i, j): tên là words[i:j]
+    def _best(self, words: list[re.Match], folded: list[str]) -> tuple[float, int, int] | None:
+        """(score, i, j) của cụm đầu câu giống tên nhất: tên là words[i:j], trước nó chỉ có từ gọi."""
+        best: tuple[float, int, int] | None = None
         for i in range(min(self.max_prefix + 1, len(words))):
             if i and folded[i - 1] not in self.prefixes:
                 break  # trước tên chỉ được có từ gọi
@@ -70,14 +70,47 @@ class WakeMatcher:
                 score = max(_similarity(joined, v) for v in self.variants)
                 if best is None or score > best[0]:
                     best = (score, i, j)
-        if best is None or best[0] < self.min_score:
-            return WakeMatch(False, score=best[0] if best else 0.0)
-        score, i, j = best
+        return best
+
+    def _rest(self, text: str, words: list[re.Match], folded: list[str], j: int) -> str:
+        """Phần câu sau words[:j], bỏ từ đệm ngay sau tên."""
         k = j
         while k < len(words) and folded[k] in self.fillers:
             k += 1
-        rest = text[words[k].start():].strip() if k < len(words) else ""
-        return WakeMatch(True, rest, round(score, 3), text[words[i].start():words[j - 1].end()])
+        return text[words[k].start():].strip() if k < len(words) else ""
+
+    def match(self, text: str) -> WakeMatch:
+        words = list(_WORD.finditer(text))
+        folded = [fold(w.group()) for w in words]
+        best = self._best(words, folded)
+        if best is None or best[0] < self.min_score:
+            return WakeMatch(False, score=best[0] if best else 0.0)
+        score, i, j = best
+        return WakeMatch(True, self._rest(text, words, folded, j), round(score, 3),
+                         text[words[i].start():words[j - 1].end()])
+
+    def strip_name(self, text: str, named: WakeMatch) -> str:
+        """Bỏ tên ở đầu câu khi lượt dò tên đã nghe thấy tên (`named`, kết quả match() của lượt đó).
+
+        Lượt nhận dạng chính (prompt glossary) có thể viết tên khác hẳn ("Mimi ơi. Mở giảm." thành
+        "Nhiên mê ơi, mở diễn."), match() không nhận ra nên cả câu thành câu hỏi. Khi đó cắt sau dấu câu
+        nằm ngay sau tên (trong số từ của tên + 2); không có thì bỏ cụm đầu câu giống tên nhất, dù điểm thấp.
+        Câu bắt đầu đúng bằng từ đầu tiên sau tên của lượt dò tên thì lượt này không viết tên: giữ nguyên.
+        """
+        m = self.match(text)
+        if m.found:
+            return m.rest
+        words = list(_WORD.finditer(text))
+        folded = [fold(w.group()) for w in words]
+        after = [fold(w) for w in _WORD.findall(named.rest)[:1]]
+        if after and folded[:1] == after:
+            return text.strip()
+        n = max(len(_WORD.findall(named.heard)), 1)
+        for k in range(min(n + 2, len(words) - 1)):
+            if _PUNCT.search(text[words[k].end():words[k + 1].start()]):
+                return text[words[k + 1].start():].strip()
+        best = self._best(words, folded)
+        return self._rest(text, words, folded, best[2]) if best else ""
 
 
 def decide(m: WakeMatch, audio_ms: int, window_ms: int, min_rest_words: int) -> str:

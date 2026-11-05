@@ -13,11 +13,12 @@ import numpy as np
 
 from .corrections import DEFAULT_PATH as CORRECTIONS_PATH, Corrector
 from .glossary import DEFAULT_PATH as GLOSSARY_PATH, Term, build_prompt, detect_topic, load_glossary, topics
+from .hallucination import drop_hallucinations
 
 
 @dataclass
 class SttResult:
-    text: str          # sau corrections
+    text: str          # sau corrections, đã bỏ câu ảo giác ("Cảm ơn các bạn đã theo dõi...")
     raw: str           # kết quả gốc của model
     topic: str | None
     topic_auto: bool   # chủ đề do server tự đoán (two_pass)
@@ -70,22 +71,29 @@ class SttService:
         return self._corrector.get()
 
     def transcribe(self, audio: np.ndarray, topic: str | None = None,
-                   glossary: list[Term] | None = None) -> SttResult:
+                   glossary: list[Term] | None = None, names: list[str] | None = None) -> SttResult:
         """topic=None: nhận dạng với prompt mặc định, đoán chủ đề, đoán được thì nhận dạng lại.
 
         glossary: thay glossary hiện tại (dùng khi thử thuật ngữ mới trước khi duyệt).
+        names: tên dự án (tab Công việc), thêm vào cuối prompt dạng "Dự án: a, b." để Whisper nghe ra
+        đúng tên. Cuối prompt vì Whisper chỉ giữ khoảng 223 token cuối.
         """
         t0 = time.perf_counter()
         glossary = glossary if glossary is not None else self._glossary.get()
+        tail = f"Dự án: {', '.join(names)}." if names else ""
+
+        def prompt(style, topic=None):
+            return " ".join(filter(None, [build_prompt(glossary, style, topic), tail])) or None
+
         topic_auto = topic is None
         if topic is None:
-            res = self._run(audio, build_prompt(glossary, "list"))
+            res = self._run(audio, prompt("list"))
             topic = detect_topic(res.text, glossary)
             if topic is not None:
-                res = self._run(audio, build_prompt(glossary, "topic", topic))
+                res = self._run(audio, prompt("topic", topic))
         else:
-            res = self._run(audio, build_prompt(glossary, "topic", topic))
-        text = self._corrector.get().apply(res.text)
+            res = self._run(audio, prompt("topic", topic))
+        text = drop_hallucinations(self._corrector.get().apply(res.text))
         return SttResult(text, res.text, topic, topic_auto, round((time.perf_counter() - t0) * 1000))
 
     def transcribe_plain(self, audio: np.ndarray, prompt: str | None = None) -> tuple[str, int]:

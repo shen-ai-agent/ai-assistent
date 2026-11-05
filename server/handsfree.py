@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from . import protocol as P
-from .assistant import Segment, Segmenter, StreamingVad, WakeMatcher
+from .assistant import Segment, Segmenter, StreamingVad, WakeMatch, WakeMatcher
 from .assistant.vad import WINDOW
 from .assistant.wake import decide
 from .protocol import ListenMode, State
@@ -142,11 +142,12 @@ class HandsFree:
         self.s.stop_asking()   # ngắt lời nếu đang nghĩ/đọc
         self.s.stop_speaking()
         if direct:
-            await self._question(seg, epoch)
+            await self._question(seg, epoch, named=m)
         elif await self._grace(seg) and epoch == self.epoch:
             await self._ack(ack)
 
-    async def _question(self, seg: Segment, epoch: int):
+    async def _question(self, seg: Segment, epoch: int, named: WakeMatch | None = None):
+        """named: kết quả lượt dò tên khi đoạn này bắt đầu bằng tên (gọi tên kèm câu hỏi)."""
         self.ack_from = None
         await self.set_mode(ListenMode.BUSY)
         await self.s.set_state(State.TRANSCRIBING)
@@ -156,12 +157,18 @@ class HandsFree:
         if res is None:
             await self.s.set_state(State.IDLE)
             return await self.set_mode(ListenMode.SLEEP)
-        m = self.matcher.match(res.text)
-        text = m.rest if m.found else res.text.strip()
-        if not text:  # chỉ gọi tên (lúc đang ACTIVE): đáp lại
+        if named is not None:   # lượt dò tên đã nghe thấy tên: bỏ tên dù lượt này viết khác
+            text, said_name = self.matcher.strip_name(res.text, named), True
+        else:
+            m = self.matcher.match(res.text)
+            text, said_name = (m.rest if m.found else res.text.strip()), m.found
+        if not text:
             await self.s.set_state(State.IDLE)
-            return await self._ack(self._pick_ack())
-        if self.s.bridge is None:
+            if said_name:   # chỉ gọi tên (lúc đang ACTIVE): đáp lại
+                return await self._ack(self._pick_ack())
+            # không nghe ra chữ nào (câu ảo giác đã bị lọc): chờ câu hỏi tiếp
+            return self._open_window(self.seg.pos, self.cfg.assistant_follow_up_s)
+        if not self.s.can_ask():
             await self.s.set_state(State.IDLE)
             return self._open_window(self.seg.pos, self.cfg.assistant_follow_up_s)
         self.s.start_ask(text, on_spoken=self._after_speaking(self.cfg.assistant_follow_up_s))

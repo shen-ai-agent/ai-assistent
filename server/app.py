@@ -26,10 +26,13 @@ from .bridge import Bridge, BridgeError, Done, SentenceFeeder, TextDelta, make_b
 from .bridge.asklog import AskLogger
 from .config import ROOT, Config, load_config
 from .assistant.commands import Command, match_command
+from .agent.tasks import Pending, TaskManager, ack_text
 from .handsfree import HandsFree
 from .learn_api import router as learn_router
 from .protocol import ErrorCode, ListenMode, State
 from .stt.service import SttService, speech_ms
+from .study import Library, StudyError, StudyService
+from .study.api import router as study_router
 from .tts.synth import TtsService, to_pcm16
 from .turnlog import TurnLogger, new_turn_id
 
@@ -53,6 +56,28 @@ def _silero_session():
     return get_vad_model().session
 
 
+def _vscode_agent(cfg: Config):
+    """Danh bạ dự án + bộ mở VS Code cho tính năng giao việc (T-011). None = tắt."""
+    if not cfg.agent_enabled:
+        return None
+    from .agent.projects import ProjectRegistry
+    from .agent.vscode import VsCodeLauncher
+    registry = ProjectRegistry(cfg.agent_roots, cfg.agent_projects_file, cfg.agent_claude_dir)
+    launcher = VsCodeLauncher(cfg.agent_code_exe or None, auto_submit=cfg.agent_auto_submit,
+                              window_wait_s=cfg.agent_window_wait_s)
+    return registry, launcher
+
+
+def _claude_tutor(cfg: Config):
+    """Gia sư cho tab Học (T-012): claude -p chạy trong thư mục tài liệu, prompt giảng bài.
+    None = tắt tab Học (bridge không phải claude_cli)."""
+    if cfg.bridge_kind != "claude_cli":
+        return None
+    from .bridge.claude_cli import ClaudeCliBridge
+    return lambda workdir: ClaudeCliBridge(workdir, cfg.study_prompt, cfg.study_tools, cfg.bridge_model,
+                                           cfg.study_timeout_s)
+
+
 async def _preset_answer(text: str) -> AsyncIterator[TextDelta | Done]:
     yield TextDelta(text)
     yield Done()
@@ -61,7 +86,9 @@ async def _preset_answer(text: str) -> AsyncIterator[TextDelta | Done]:
 def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], object] = _whisper_engine,
                tts_factory: Callable[[Config], object] = _zerotts_engine,
                bridge_factory: Callable[[Config], Bridge | None] = make_bridge,
-               vad_factory: Callable[[], object] = _silero_session) -> FastAPI:
+               vad_factory: Callable[[], object] = _silero_session,
+               agent_factory: Callable[[Config], tuple | None] = _vscode_agent,
+               tutor_factory: Callable[[Config], Callable | None] = _claude_tutor) -> FastAPI:
     cfg = cfg or load_config()
 
     @asynccontextmanager
@@ -96,8 +123,32 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
                 # Hotkey khi không có lượt nào chờ (câu hỏi gõ thẳng trong Claude): đọc ở tab mới nhất
                 bridge.on_orphan = lambda text: app.state.sessions and app.state.sessions[-1].start_ask(
                     "(clipboard)", _preset_answer(text))
+        make_tutor = tutor_factory(cfg)
+        app.state.study = StudyService(Library(cfg.study_dir, cfg.study_max_chars), make_tutor) if make_tutor else None
+        app.state.agent = None
+        if parts := agent_factory(cfg):
+            registry, launcher = parts
+
+            async def broadcast(msg: dict):
+                for s in list(app.state.sessions):
+                    await s.send(msg)
+
+            async def notify(task, text: str):
+                sessions = app.state.sessions
+                target = task.origin if task.origin in sessions else sessions[-1] if sessions else None
+                if target is not None:
+                    await target.notify_speak(text)
+
+            app.state.agent = TaskManager(registry, launcher, broadcast=broadcast, notify=notify,
+                                          claude_dir=cfg.agent_claude_dir, log_dir=cfg.agent_log_dir,
+                                          stall_s=cfg.agent_stall_s, submit_timeout_s=cfg.agent_submit_timeout_s,
+                                          task_timeout_s=cfg.agent_task_timeout_s,
+                                          on_label=app.state.turnlog.intent)
+            log.info("Giao việc VS Code: %d dự án", len(registry.all()))
         log.info("Sẵn sàng: http://%s:%d", cfg.host, cfg.port)
         yield
+        if app.state.agent is not None:
+            app.state.agent.close()
         if bridge is not None and hasattr(bridge, "stop"):
             bridge.stop()
 
@@ -118,6 +169,7 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         return FileResponse(cfg.lan_cert, media_type="application/x-x509-ca-cert", filename="mimi-lan.crt")
 
     app.include_router(learn_router)
+    app.include_router(study_router)
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket):
@@ -162,6 +214,13 @@ class Session:
         self.ask_id = 0
         self.last_answer = ""   # câu trả lời xong gần nhất, cho lệnh "đọc lại"
         self.hf: HandsFree | None = None
+        self.agent: TaskManager | None = app.state.agent
+        self.work = False                  # chế độ công việc: tab Công việc đang mở (message work)
+        self.focus: str | None = None      # dự án đang chọn ở tab Công việc
+        self.pending: Pending | None = None   # Mimi vừa hỏi "dự án nào?", chờ câu trả lời
+        self.last_heard: tuple[str, str] | None = None   # (turn_id, text) của lượt nhận dạng gần nhất
+        self.study: StudyService | None = app.state.study
+        self.study_doc: str | None = None  # tài liệu đang mở ở tab Học (message study): câu hỏi đi tới gia sư
 
     async def run(self):
         tts = {"sample_rate": self.tts.sample_rate, "voice": self.cfg.tts_voice} if self.tts else None
@@ -170,8 +229,12 @@ class Session:
                                   "models": self.cfg.bridge_models if hasattr(self.bridge, "model") else []}
         assistant = {"name": self.cfg.assistant_name, "sleep_silence_ms": self.cfg.assistant_sleep_silence_ms,
                      "active_silence_ms": self.cfg.assistant_active_silence_ms}
-        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge, assistant))
+        agent = self.agent and {"auto_submit": self.cfg.agent_auto_submit}
+        study = self.study and {"max_chars": self.cfg.study_max_chars}
+        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge, assistant, agent, study))
         await self.set_state(State.IDLE)
+        if self.agent:
+            await self.send(P.tasks(self.agent.snapshot()))
         self.app.state.sessions.append(self)
         try:
             while True:
@@ -253,7 +316,7 @@ class Session:
                 return await self.send(P.error(ErrorCode.BAD_MESSAGE, "ask cần text"))
             if self.bridge is None:
                 return await self.send(P.error(ErrorCode.BRIDGE_DISABLED, "Server chưa bật bridge tới Claude"))
-            self.start_ask(text)
+            self.start_ask(text, source="text")
         elif kind == "ask_stop":
             self.stop_asking()
             self.stop_speaking()
@@ -287,8 +350,53 @@ class Session:
             else:
                 self.hf = HandsFree(self, self.app.state.vad_session, topic)
                 await self.send(P.listen(self.hf.mode))
+        elif kind == "study":
+            await self.on_study(msg.get("doc_id"))
+        elif kind in ("projects", "task", "task_cancel", "task_open", "task_fix", "work"):
+            await self.on_task_message(kind, msg)
         else:
             await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Không biết message {kind!r}"))
+
+    async def on_task_message(self, kind: str, msg: dict):
+        if self.agent is None:
+            return await self.send(P.error(ErrorCode.AGENT_DISABLED, "Server đang tắt tính năng giao việc VS Code"))
+        if kind == "projects":
+            await self.send(P.projects(self.agent.projects(refresh=True)))
+        elif kind == "task":
+            text, project = msg.get("text", ""), msg.get("project") or None
+            if not isinstance(text, str) or not (text.strip() or project):
+                return await self.send(P.error(ErrorCode.BAD_MESSAGE, "task cần text hoặc project"))
+            self.agent.start_text(text.strip(), project if isinstance(project, str) else None, origin=self)
+        elif kind == "task_cancel":
+            self.agent.cancel(msg.get("task_id"))
+        elif kind == "task_open":
+            if not await self.agent.open_session(msg.get("task_id")):
+                await self.send(P.error(ErrorCode.BAD_MESSAGE, "Không mở lại được phiên của task này"))
+        elif kind == "task_fix":
+            project, request = msg.get("project"), msg.get("request")
+            if not isinstance(project, str) or (request is not None and not isinstance(request, str)):
+                return await self.send(P.error(ErrorCode.BAD_MESSAGE, "task_fix cần project"))
+            if self.agent.fix(msg.get("task_id"), project, request, origin=self) is None:
+                await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Không giao lại được task sang dự án {project!r}"))
+        elif kind == "work":
+            project = msg.get("project")
+            self.work = bool(msg.get("on"))
+            self.focus = project if isinstance(project, str) and project else None
+
+    async def on_study(self, doc_id):
+        """Tab Học mở / đóng một tài liệu."""
+        if doc_id is None:
+            self.study_doc = None
+            return
+        if self.study is None:
+            return await self.send(P.error(ErrorCode.STUDY_DISABLED, 'Tab Học cần [bridge] kind = "claude_cli"'))
+        try:
+            doc = self.study.library.get(doc_id)
+        except StudyError as e:
+            self.study_doc = None
+            return await self.send(P.error(ErrorCode.BAD_MESSAGE, str(e)))
+        self.study_doc = doc.id
+        await self.send(P.study_doc(doc.public()))
 
     async def finish_turn(self):
         pcm = b"".join(self.chunks)
@@ -322,8 +430,11 @@ class Session:
     async def recognize(self, audio: np.ndarray, audio_ms: int, topic: str | None, **log_fields):
         """Nhận dạng một lượt, ghi log, gửi transcript. Lỗi thì báo client và trả None."""
         turn_id = new_turn_id()
+        names = self.agent.stt_names() if self.agent and self.work else None  # tab Công việc: nghe đúng tên dự án
+        if names:
+            log_fields["names"] = len(names)
         try:
-            res = await self.run_gpu(self.stt.transcribe, audio, topic)
+            res = await self.run_gpu(self.stt.transcribe, audio, topic, None, names)
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -332,6 +443,7 @@ class Session:
             return None
         self.turnlog.turn(turn_id, audio, topic=res.topic, topic_auto=res.topic_auto,
                           audio_ms=audio_ms, stt_ms=res.stt_ms, raw=res.raw, text=res.text, **log_fields)
+        self.last_heard = (turn_id, res.text)
         await self.send(P.transcript(turn_id, res.text, res.topic, res.topic_auto, audio_ms, res.stt_ms))
         return res
 
@@ -342,28 +454,70 @@ class Session:
             return
         if res is None:
             return await self.set_state(State.IDLE)
-        if self.bridge is not None and self.cfg.bridge_auto_ask and res.text.strip():
+        if self.can_ask() and (self.cfg.bridge_auto_ask or self.work or self.study_doc) and res.text.strip():
             self.start_ask(res.text)
         else:
             await self.set_state(State.IDLE)
 
-    def start_ask(self, question: str, stream: AsyncIterator[TextDelta | Done] | None = None, on_spoken=None):
+    def start_ask(self, question: str, stream: AsyncIterator[TextDelta | Done] | None = None, on_spoken=None,
+                  source: str = "voice"):
         """Hỏi Claude (thay lượt đang chạy). stream có sẵn = câu trả lời đã có (hotkey clipboard).
         on_spoken: gọi khi đọc xong câu trả lời (xem begin_speaking).
-        Câu ngắn là lệnh ("mở session mới", "dừng", "đọc lại") thì chạy ngay, không hỏi Claude."""
+        Câu ngắn là lệnh ("mở session mới", "dừng", "đọc lại") thì chạy ngay, không hỏi Claude.
+        Câu giao việc ("mở dự án X rồi ...") thì giao cho Claude trong VS Code (T-011).
+        Tab Học đang mở tài liệu: câu hỏi đi tới gia sư của tài liệu đó (T-012)."""
         self.stop_asking()
         cmd = match_command(question) if stream is None else None
         if cmd is not None:
             self.ask_task = asyncio.create_task(self.run_command(cmd, question, on_spoken))
             return
+        if self.study_doc is not None and self.study is not None and stream is None:
+            doc_id = self.study_doc
+            self.ask_id += 1
+
+            async def on_doc(doc):
+                await self.send(P.study_doc(doc.public()))
+
+            events = self.study.ask(doc_id, question, getattr(self.bridge, "model", None), on_doc)
+            self.ask_task = asyncio.create_task(self.answer(self.ask_id, question, events, on_spoken, doc_id))
+            return
+        route = self.route_task(question, source) if self.agent and stream is None else None
+        if route is not None and route.dev is not None:
+            task = self.agent.start(route.dev, source, origin=self, run=False, turn_id=route.turn_id)
+            self.ask_task = asyncio.create_task(self.reply_command(
+                "dev_task", question, ack_text(task), on_spoken, then=lambda: self.agent.launch(task)))
+            return
+        if route is not None:
+            self.ask_task = asyncio.create_task(self.reply_command("work", question, route.reply, on_spoken,
+                                                                   choices=route.choices))
+            return
+        if self.bridge is None:
+            return
         self.ask_id += 1
         self.ask_task = asyncio.create_task(
             self.answer(self.ask_id, question, stream or self.bridge.ask(question), on_spoken))
+
+    def can_ask(self) -> bool:
+        """Có ai nhận câu hỏi không: Claude (bridge), chế độ công việc giao cho VS Code, hoặc gia sư tab Học."""
+        return (self.bridge is not None or (self.agent is not None and self.work)
+                or (self.study is not None and self.study_doc is not None))
+
+    def route_task(self, question: str, source: str = "voice"):
+        """Câu này là việc cho VS Code / câu hỏi tiến độ (Route) hay để hỏi Claude (None)."""
+        pending = self.pending if self.pending and not self.pending.expired else None
+        # turn_id chỉ khi câu đến từ lượt nhận dạng vừa rồi (rảnh tay đã bỏ tên trợ lý nên chỉ là một phần)
+        heard = self.last_heard if source != "text" else None
+        turn_id = heard[0] if heard and question.strip() and question.strip() in heard[1] else None
+        route = self.agent.route(question, work=self.work, focus=self.focus, pending=pending, turn_id=turn_id)
+        self.pending = route.pending if route else None
+        return route
 
     async def run_command(self, cmd: Command, text: str, on_spoken=None):
         reply = None
         if cmd is Command.STOP:
             self.stop_speaking()
+        elif cmd is Command.NEW_SESSION and self.study_doc is not None:
+            reply = "Ở tab Học, muốn học lại từ đầu thì bấm nút Học lại."
         elif cmd is Command.NEW_SESSION:
             if self.bridge is not None:
                 self.bridge.new_session()
@@ -372,20 +526,43 @@ class Session:
             reply = "Đã mở cuộc trò chuyện mới."
         elif cmd is Command.REPEAT:
             reply = self.last_answer or "Chưa có câu trả lời nào để đọc lại."
-        await self.send(P.command(cmd, text, reply))
+        await self.reply_command(cmd, text, reply, on_spoken)
+
+    async def reply_command(self, name: str, text: str, reply: str | None, on_spoken=None, then=None,
+                            choices: list[str] | None = None):
+        """Báo web một lệnh đã chạy và đọc câu đáp (nếu có). then(): chạy ngay sau khi web nhận lệnh.
+        choices: tên dự án Mimi vừa hỏi lại, web hiện thành nút chọn."""
+        try:
+            await self.send(P.command(name, text, reply, choices))
+        finally:
+            if then:
+                then()  # kể cả khi bị huỷ (nói chen ngang): việc đã nhận thì vẫn làm
         await self.set_state(State.IDLE)
         if reply and self.tts:
             queue = self.begin_speaking(on_spoken)[1]
             queue.put_nowait(reply)
             queue.put_nowait(None)
         elif on_spoken:
-            await on_spoken(cmd is Command.STOP, None, 0, 0)  # dừng: rảnh tay về SLEEP
+            await on_spoken(name == Command.STOP, None, 0, 0)  # dừng: rảnh tay về SLEEP
 
-    async def answer(self, ask_id: int, question: str, stream: AsyncIterator[TextDelta | Done], on_spoken=None):
-        """Chuyển text Claude về web và cắt dần thành câu cho TTS, để câu đầu được đọc khi Claude còn đang viết."""
+    async def notify_speak(self, text: str):
+        """Đọc thông báo của task nền (xong việc, chờ duyệt) nếu tab đang rảnh; đang bận thì chỉ hiện trên web."""
+        busy = (self.state is not State.IDLE or (self.speak_task and not self.speak_task.done())
+                or (self.ask_task and not self.ask_task.done())
+                or (self.hf is not None and self.hf.mode is not ListenMode.SLEEP))
+        if self.tts is None or busy:
+            return
+        queue = self.begin_speaking()[1]
+        queue.put_nowait(text)
+        queue.put_nowait(None)
+
+    async def answer(self, ask_id: int, question: str, stream: AsyncIterator[TextDelta | Done], on_spoken=None,
+                     doc_id: str | None = None):
+        """Chuyển text Claude về web và cắt dần thành câu cho TTS, để câu đầu được đọc khi Claude còn đang viết.
+        doc_id: lượt giảng của tài liệu ở tab Học (stream là StudyService.ask)."""
         t0 = time.perf_counter()
         speak_id, queue = self.begin_speaking(on_spoken) if self.tts else (None, None)
-        await self.send(P.answer_start(ask_id, question, speak_id))
+        await self.send(P.answer_start(ask_id, question, speak_id, doc_id))
         await self.set_state(State.WAITING_CLAUDE)
         feeder = SentenceFeeder()
         parts: list[str] = []
@@ -419,7 +596,7 @@ class Session:
                     queue.put_nowait("Không hỏi được Claude, xem lỗi trên màn hình.")
             queue.put_nowait(None)
         total_ms = round((time.perf_counter() - t0) * 1000)
-        session_id = done.session_id if done else self.bridge and self.bridge.session_id
+        session_id = done.session_id if done else None if doc_id else self.bridge and self.bridge.session_id
         cost = done.cost_usd if done else None
         model = done.model if done else None
         await self.send(P.answer_end(ask_id, cancelled, error, session_id, first_ms, total_ms, cost, model))
@@ -427,7 +604,7 @@ class Session:
             self.last_answer = "".join(parts)
         self.asklog.write(bridge=self.bridge and self.bridge.name, session_id=session_id, question=question,
                           answer="".join(parts), first_text_ms=first_ms, total_ms=total_ms, cost_usd=cost,
-                          model=model, error=error, cancelled=cancelled)
+                          model=model, error=error, cancelled=cancelled, **({"study": doc_id} if doc_id else {}))
         if self.state is State.WAITING_CLAUDE:
             await self.set_state(State.IDLE)
         if on_spoken and not self.tts:

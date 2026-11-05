@@ -167,6 +167,7 @@
   <a href="#phase6">6 · Giọng của mình <span class="pct" data-for="phase6"></span></a>
   <a href="#phase7">7 · Mọi thiết bị <span class="pct" data-for="phase7"></span></a>
   <a href="#phase8">8 · Tự học dài hạn <span class="pct" data-for="phase8"></span></a>
+  <a href="#phase9">9 · Giao việc cho VS Code <span class="pct" data-for="phase9"></span></a>
   <div class="group-label">Khác</div>
   <a href="#risks">Rủi ro tổng thể</a>
   <a href="#rules">Quy ước làm việc</a>
@@ -279,6 +280,7 @@
     <div class="rm-row"><div class="ph">Phase 6</div><div class="rm-track"><span class="opt" style="left:85%;width:15%">Giọng của mình (tuỳ chọn)</span></div><div class="dur">4–8 buổi</div></div>
     <div class="rm-row"><div class="ph">Phase 7</div><div class="rm-track"><span style="left:67%;width:15%">Mọi thiết bị (song song 5/6)</span></div><div class="dur">3–5 buổi</div></div>
     <div class="rm-row"><div class="ph">Phase 8</div><div class="rm-track"><span style="left:67%;width:33%">Tự học dài hạn (song song 5–7, chạy liên tục)</span></div><div class="dur">liên tục</div></div>
+    <div class="rm-row"><div class="ph">Phase 9</div><div class="rm-track"><span style="left:67%;width:18%">Giao việc cho VS Code (sau Phase 5)</span></div><div class="dur">3–5 buổi</div></div>
   </div>
 
   <h3>Mốc quan trọng</h3>
@@ -870,7 +872,7 @@ Server → Client
     <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
   </div>
 
-  <div class="box"><p><b>Trạng thái (16/10/2026):</b> rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền.</p></div>
+  <div class="box"><p><b>Trạng thái (16/10/2026):</b> rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền. <b>04/11/2026:</b> tab Học bài (T-012).</p></div>
 
   <div class="goal">Sửa những gì việc <b>dùng thật</b> chỉ ra. Ưu tiên theo <code>feedback.md</code>, <b>không cần làm hết</b> danh sách dưới đây.</div>
 
@@ -886,6 +888,8 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Ghi ≥30 phút âm nền, đo nhận nhầm/giờ</span></label>
       <div class="hint">Đã đo trên 100 câu testset (âm tính): 0 nhận nhầm, STT tìm tên p50 425ms / p95 544ms; bị cắt nhiều đoạn 14% ở silence 500ms, 1% ở 900ms.</div></li>
     <li><label><input type="checkbox"><span class="t">Nút "đọc lại", "đọc chậm", chỉnh tốc độ đọc</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t"><b>Tab Học bài (T-012)</b>: dán text hoặc chọn file <code>.txt</code>/<code>.md</code>/<code>.docx</code>, Mimi đọc hết, chia 3–8 phần, giảng từng phần bằng giọng nói, hết phần thì dừng hỏi</span></label>
+      <div class="hint">Thư viện lưu ở <code>_local/study/</code>, mỗi tài liệu một session Claude riêng (không lẫn với tab Mimi), mở lại thì học tiếp. Nói "tiếp", "giảng lại", "kiểm tra mình" hoặc hỏi chen giữa chừng; dòng <code>[Phần k/N: …]</code> Claude viết ở đầu lượt giảng thành thanh tiến độ, không đọc. Ghi chú sau <code>---CODE---</code> hiện dạng markdown dưới bong bóng (04/11/2026).</div></li>
     <li><label><input type="checkbox" checked><span class="t">Lệnh giọng nói đơn giản: "dừng", "đọc lại", "session mới"</span></label>
       <div class="hint"><code>server/assistant/commands.py</code>: chạy ngay trên server, không hỏi Claude (Claude không điều khiển được app). Chỉ câu ngắn mới là lệnh: "đọc lại câu vừa rồi chậm hơn được không" vẫn hỏi Claude.</div></li>
   </ul>
@@ -1080,11 +1084,25 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">Biểu đồ tiến bộ trên trang Đề xuất học: WER cá nhân theo tuần, số lỗi đã học</span></label></li>
     <li><label><input type="checkbox"><span class="t"><b>Fine-tune LoRA</b> large-v3 khi có ≥ 2–3 giờ audio đã sửa ở dev (chuyển từ Phase 5)</span></label>
       <div class="hint">Thử trước xem có vừa 12GB VRAM không. Chỉ nhận model mới nếu holdout cá nhân và bộ 100 câu không tệ hơn, tiếng Việt thuần không kém đi.</div></li>
+    <li><label><input type="checkbox"><span class="t">Kịch bản ghi âm cho LoRA lấy từ prompt người dùng đã gõ trong Claude Code (<code>~/.claude/projects/*/*.jsonl</code>, ~500 câu trộn Anh–Việt đúng văn phong), 40–50% câu trộn; giữ nhóm <code>en</code> để kiểm tra không tụt tiếng Anh</span></label></li>
   </ul>
   <h4>C. Gọi tên Mimi</h4>
   <ul class="tasks">
     <li><label><input type="checkbox"><span class="t">Gom audio gọi tên thật (<code>_local/logs/wake-*.jsonl</code>) thành bộ gọi tên lớn dần</span></label></li>
     <li><label><input type="checkbox"><span class="t">Đủ vài trăm mẫu + âm nền: train openWakeWord riêng cho "Mimi" (bước B của T-010), so với bước A bằng <code>bench/wake_bench.py</code></span></label></li>
+  </ul>
+  <h4>D. Hiểu ý giao việc</h4>
+  <div class="note">Phase 9. Dự án mới lúc đầu phải dạy vài lần, sau đó tự nhận. Học tức thì (biệt danh, ví dụ cho LLM) không cần train model; train LoRA là bước cuối, khi đủ audio.</div>
+  <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t">Nút "Sai rồi" trên tab Công việc: chọn lại dự án đúng / sửa câu yêu cầu → ghi nhãn (audio, câu nghe được, dự án đúng, yêu cầu đúng) vào <code>_local/logs/intents-*.jsonl</code></span></label>
+      <div class="hint">01/11/2026: nút "Sai dự án" trên thẻ việc (message <code>task_fix</code>) giao lại ở dự án đúng. Nhãn có <code>turn_id</code> trỏ về <code>turns-*.jsonl</code> (audio, câu nghe được), <code>heard</code>, <code>query</code>, <code>project</code>, <code>wrong</code>, <code>request</code>, <code>via</code>. Trả lời khi Mimi hỏi lại: "ừ / đúng rồi" (một ứng viên), "cái thứ hai", "không phải" rồi nói tên, hoặc bấm nút ứng viên (<code>command.choices</code>). Nói "sai rồi" / "không phải, X cơ" trong 2 phút sau khi giao việc: thôi theo dõi việc đó, hỏi lại hoặc giao sang X.</div></li>
+    <li><label><input type="checkbox"><span class="t">Nhãn ngầm, không cần bấm: chọn ứng viên khi Mimi hỏi lại, ngừng theo dõi trong 30 giây đầu, nói lại câu gần giống ngay sau đó</span></label>
+      <div class="hint">01/11/2026: đã có nhãn khi chọn ứng viên / nói tên lúc Mimi hỏi lại; còn ngừng theo dõi sớm, nói lại câu gần giống.</div></li>
+    <li><label><input type="checkbox"><span class="t">Tự sinh biệt danh dự án (<code>_local/projects.toml</code>) khi cùng một cách nghe sai trỏ về cùng một dự án ≥ 2 lần ở dev, như rule corrections</span></label></li>
+    <li><label><input type="checkbox"><span class="t"><code>bench/intent_bench.py</code>: chấm kho nhãn theo dev/holdout (đúng dự án, đúng loại câu: việc / hỏi / tiến độ); mọi thay đổi alias, rule, prompt chỉ áp dụng khi không tụt</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Bộ luật không chắc thì hỏi LLM nhỏ (Claude Haiku): danh sách dự án + vài ví dụ gần nhất lấy từ kho nhãn; LLM cũng không chắc thì Mimi hỏi lại</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Job học hằng đêm lúc server rảnh: gom nhãn mới → đề xuất → chạy bench → tự áp dụng thứ qua kiểm tra, thứ chưa chắc đưa lên trang Đề xuất học</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Số theo ngày trên trang Đề xuất học: tỉ lệ đúng dự án, số lần phải sửa trên 10 việc</span></label></li>
   </ul>
 
   <h3>Definition of Done</h3>
@@ -1094,6 +1112,7 @@ Server → Client
     <li><label><input type="checkbox"><span class="t">WER cá nhân trên holdout sau 1 tháng dùng thấp hơn lúc bắt đầu, có số theo từng tuần</span></label></li>
     <li><label><input type="checkbox"><span class="t">Mọi thay đổi được áp dụng (lexicon, glossary, rule, model) có số trước/sau và gỡ lại được</span></label></li>
     <li><label><input type="checkbox"><span class="t">Duyệt một đề xuất ≤ <span class="metric">2</span> chạm</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Giao việc: số lần phải sửa trên 10 việc giảm theo tuần; dự án mới nhận đúng sau ≤ <span class="metric">2</span> lần sửa</span></label></li>
   </ul>
 
   <h3>Rủi ro</h3>
@@ -1102,6 +1121,80 @@ Server → Client
     <tr><td>Học sai: rule/lexicon làm hỏng chỗ đang đúng</td><td>Kiểm tra trên dev trước khi duyệt; ghi quyết định vào <code>_local/learning/decisions.jsonl</code>, gỡ lại được.</td></tr>
     <tr><td>Quá ít tín hiệu vì người dùng ít sửa tay</td><td>Tín hiệu ngầm (hỏi lại, nói lại) + hàng chờ sửa một chạm.</td></tr>
     <tr><td>Fine-tune làm kém tiếng Việt thuần hoặc câu tiếng Anh</td><td>Đo theo nhóm vi/mix/dense/en trên holdout; không đạt thì giữ model gốc.</td></tr>
+  </table>
+</section>
+
+<section class="phase" id="phase9">
+  <div class="phase-head">
+    <div>
+      <span class="badge">PHASE 9</span>
+      <h2>Giao việc cho VS Code</h2>
+      <div class="chips">
+        <span class="chip">⏱ <b>3–5 buổi</b></span>
+        <span class="chip">Phụ thuộc: <b>Phase 4 (T-009), Phase 5 (T-010)</b></span>
+        <span class="chip">Ticket: <b>T-011</b></span>
+      </div>
+    </div>
+    <div class="phase-progress"><span class="pp-label"></span><div class="bar"><span class="pp-bar"></span></div></div>
+  </div>
+
+  <div class="goal">Nói <b>"Mimi ơi, mở dự án job hay rồi thêm phân trang cho trang danh sách"</b> → Mimi tìm đúng thư mục dự án, mở VS Code ở đó, đưa yêu cầu vào ô chat Claude Code, theo dõi tiến độ, xong thì đọc báo cáo ngắn.</div>
+
+  <div class="flow">
+    <div class="node web">Câu nói / tab Công việc<small>"mở dự án X rồi …"</small></div><span class="arrow">→</span>
+    <div class="node stt">Danh bạ dự án<small>roots + projects.toml, tìm gần đúng</small></div><span class="arrow">→</span>
+    <div class="node tts">VS Code<small>mở thư mục, URI điền yêu cầu, Enter</small></div><span class="arrow">→</span>
+    <div class="node llm">Log phiên Claude Code<small>bước tool, chờ duyệt, báo cáo</small></div>
+  </div>
+
+  <div class="note">Mimi không tự sửa code. Claude Code trong VS Code làm việc, người dùng vẫn duyệt quyền như bình thường. URI <code>vscode://anthropic.claude-code/open?prompt=…</code> chỉ <b>điền sẵn</b> yêu cầu (extension 2.1.x không tự gửi), nên Mimi nhấn Enter khi cửa sổ trên cùng đúng là VS Code của dự án; không chắc thì chỉ điền sẵn và nhắc người dùng. Lúc chờ duyệt, log không có dấu hiệu riêng: chỉ thấy tool chưa có kết quả quá <code>stall_s</code>.</div>
+
+  <h3>TODO</h3>
+  <h4>A1. Danh bạ dự án + lệnh "mở dự án X"</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t"><code>server/agent/projects.py</code>: quét <code>[agent] roots</code>, thêm dự án từng mở bằng Claude Code, biệt danh/loại trừ trong <code>_local/projects.toml</code>; tìm gần đúng theo tên đọc lên</span></label>
+      <div class="hint">"job hay" → <code>job-hay</code>. Thư mục log phiên: slug = đường dẫn thay mọi ký tự không phải chữ/số bằng <code>-</code>; chữ ổ đĩa có thể hoa hoặc thường.</div></li>
+    <li><label><input type="checkbox" checked><span class="t"><code>server/agent/intent.py</code>: tách câu nói thành dự án + yêu cầu; câu hỏi kiến thức ("dự án là gì") vẫn đi tới Claude</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Hai dự án giống nhau hoặc không tìm thấy: Mimi hỏi lại / báo không tìm thấy, không mở bừa</span></label></li>
+  </ul>
+  <h4>A2. Giao việc + theo dõi + báo cáo</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t"><code>server/agent/vscode.py</code>: mở VS Code ở thư mục dự án, mở tab Claude bằng URI (chỉ điền sẵn), tự nhấn Enter khi cửa sổ đúng dự án ở trên cùng (<code>auto_submit</code>, tắt được)</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t"><code>server/agent/watcher.py</code>: đọc tăng dần log phiên, nhận ra lượt vừa gửi, báo từng bước tool, "chờ duyệt hoặc chạy lâu", kết thúc khi <code>end_turn</code></span></label></li>
+    <li><label><input type="checkbox" checked><span class="t"><code>server/agent/tasks.py</code>: <code>TaskManager</code> điều phối, broadcast cho mọi tab, đọc báo cáo bằng giọng khi tab rảnh, log <code>_local/tasks</code></span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Web: tab <b>Công việc</b> (chọn dự án + gõ yêu cầu, thẻ task có timeline bước, báo cáo, ngừng theo dõi, mở lại phiên trong VS Code); thẻ task trong chat Mimi</span></label></li>
+  </ul>
+  <h4>A2b. Giao việc bằng giọng nói ở tab Công việc</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox" checked><span class="t">Đang ở tab Công việc (message <code>work</code>): mọi câu nói là giao việc, không hỏi Claude của Mimi; câu không nêu tên dự án thì làm ở dự án đang chọn, không chọn thì dự án của việc gần nhất, chưa có thì Mimi hỏi "làm ở dự án nào?" rồi nhận câu trả lời tên dự án</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Tên dự án mơ hồ: Mimi hỏi lại, câu trả lời kế tiếp (trong 90 giây) chọn dự án và giữ yêu cầu cũ</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Hỏi tiến độ ("tới đâu rồi", "xong chưa") và "ngừng theo dõi" bằng giọng nói, ở mọi tab khi đang có việc chạy</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">Web: thanh giọng nói đầu tab (orb nhỏ, nút Rảnh tay, chọn dự án mặc định, câu bạn nói và câu Mimi đáp); form gõ tay thu vào "Gõ tay"</span></label></li>
+    <li><label><input type="checkbox" checked><span class="t">STT nghe đúng tên dự án: ở tab Công việc, prompt Whisper thêm "Dự án: job hay, fruit rush, …" (30 dự án dùng gần nhất + biệt danh); câu thiếu từ "dự án" vẫn nhận tên ở bất kỳ đâu trong câu khi khớp chắc (≥ 0.85)</span></label>
+      <div class="hint">Hai lượt nói thật: "Mở dự án chấp 2" → "Mở dự án job hay", "Mở dạng job page" → "Mở dạng job hay". Chưa đo trên bộ test (cần ghi âm câu có tên dự án).</div></li>
+    <li><label><input type="checkbox" checked><span class="t">Sửa theo lần thử thật 01/11/2026: (1) lượt dò tên đã nghe "Mimi" thì luôn bỏ tên khỏi câu, kể cả khi lượt nhận dạng chính viết tên khác; (2) bỏ câu Whisper bịa khi audio là tiếng ồn; (3) câu ngắn "mở X" mà X không khớp chắc dự án nào thì hỏi lại kèm ứng viên, không giao cho dự án đang chọn</span></label>
+      <div class="hint">Lỗi gặp: "Mimi ơi. Mở giảm." (lượt dò tên) thành "Nhiên mê ơi, mở diễn." (lượt chính) nên cả câu bị giao đi; "mở dạng karaoke" bị giao cho play-crew (dự án vừa làm) thay vì hỏi "guitar karaoke?". Log có 20 câu ảo giác kiểu "Cảm ơn các bạn đã theo dõi và hẹn gặp lại." (<code>server/stt/hallucination.py</code>).</div></li>
+  </ul>
+  <h4>Để sau</h4>
+  <ul class="tasks">
+    <li><label><input type="checkbox"><span class="t">A3: Mimi tự làm (Claude headless trong thư mục dự án, duyệt quyền qua web/giọng nói)</span></label></li>
+    <li><label><input type="checkbox"><span class="t">A4: điều khiển máy ngoài VS Code (mở app, trình duyệt…)</span></label></li>
+  </ul>
+
+  <h3>Definition of Done</h3>
+  <ul class="tasks dod">
+    <li><label><input type="checkbox"><span class="t">Thử thật: nói "mở dự án X rồi &lt;yêu cầu chỉ đọc&gt;" → VS Code mở đúng dự án, yêu cầu được gửi, tab Công việc hiện các bước, nghe báo cáo</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Tìm đúng dự án ≥ <span class="metric">9/10</span> câu nói thật có tên dự án</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Từ lúc nói xong đến lúc yêu cầu vào ô chat ≤ <span class="metric">10s</span> khi VS Code chưa mở</span></label></li>
+    <li><label><input type="checkbox"><span class="t">Không gửi Enter nhầm cửa sổ: cửa sổ trên cùng không phải VS Code đúng dự án thì chỉ điền sẵn và nhắc người dùng</span></label></li>
+  </ul>
+
+  <h3>Rủi ro</h3>
+  <table>
+    <tr><th>Rủi ro</th><th>Cách xử lý</th></tr>
+    <tr><td>Enter rơi vào cửa sổ khác (người dùng bấm chỗ khác đúng lúc)</td><td>Kiểm tra tiêu đề cửa sổ trên cùng ngay trước khi gửi phím; tắt <code>auto_submit</code> thì chỉ điền sẵn.</td></tr>
+    <tr><td>Extension Claude Code đổi URI handler hoặc định dạng log</td><td>Code đọc log chịu được trường lạ; không nhận ra lượt gửi trong <code>submit_timeout_s</code> thì báo thất bại, không treo.</td></tr>
+    <tr><td>Nhận nhầm câu hỏi thường thành lệnh mở dự án</td><td>Chỉ nhận câu có từ khoá ("dự án", "project", "vs code", "mở code") và không có dạng câu hỏi ("là gì", "làm sao", "cách…"); còn lại vẫn hỏi Claude.</td></tr>
   </table>
 </section>
 

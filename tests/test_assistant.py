@@ -7,6 +7,7 @@ import pytest
 
 from server.assistant import Segmenter, StreamingVad, WakeMatcher
 from server.assistant.vad import WINDOW
+from server.stt.hallucination import drop_hallucinations
 
 
 class FakeVadSession:
@@ -253,6 +254,60 @@ def test_handsfree_name_and_question_in_one_breath(tmp_path):
         assert heard["action"] == "ask" and heard["ack"] is None
         until(ws, lambda m: m["type"] == "answer_end")
         assert bridge.questions == ["EC2 là gì?"]   # bỏ tên khỏi câu hỏi
+
+
+def test_handsfree_strips_name_main_pass_misheard(tmp_path):
+    # Lượt dò tên nghe đúng "Mimi", lượt nhận dạng chính (có glossary) viết tên khác hẳn: vẫn phải bỏ tên
+    engine = ScriptedEngine(["Mimi ơi. Mở giảm."], ["Nhiên mê ơi, EC2 là gì?"])
+    bridge = FakeBridge(["Máy ảo."])
+    with hf_client(tmp_path, engine, bridge, FakeTts()) as client, client.websocket_connect("/ws") as ws:
+        start_listen(ws)
+        say(ws, 1500)
+        until(ws, lambda m: m["type"] == "answer_end")
+        assert bridge.questions == ["EC2 là gì?"]
+
+
+def test_handsfree_drops_whisper_hallucination(tmp_path):
+    engine = ScriptedEngine(["Mimi ơi"], ["Cảm ơn các bạn đã theo dõi và hẹn gặp lại.", "EC2 là gì?"])
+    bridge = FakeBridge(["Máy ảo."])
+    with hf_client(tmp_path, engine, bridge, FakeTts()) as client, client.websocket_connect("/ws") as ws:
+        start_listen(ws)
+        say(ws, 600)
+        until(ws, lambda m: m["type"] == "speak_end")
+        say(ws, 0, 1500)
+        until(ws, mode("ACTIVE"))
+        say(ws, 800, 1200)                # tiếng ồn: Whisper bịa câu cuối video
+        assert until(ws, lambda m: m["type"] == "transcript")["text"] == ""
+        say(ws, 0, 300)
+        until(ws, mode("ACTIVE"))         # không hỏi Claude, chờ câu hỏi tiếp
+        say(ws, 800, 1200)
+        until(ws, lambda m: m["type"] == "answer_end")
+        assert bridge.questions == ["EC2 là gì?"]
+
+
+@pytest.mark.parametrize("wake, text, rest", [
+    ("Mimi ơi. Mở giảm.", "Nhiên mê ơi, mở diễn.", "mở diễn."),
+    ("Mimi ơi.", "Nhiên mê ơi mở job hay, rồi thêm phân trang", "mở job hay, rồi thêm phân trang"),
+    ("Mimi ơi mở job", "Mimi ơi mở job hay", "mở job hay"),
+    ("Mimi ơi", "Nhiên", ""),
+    ("Mimi ơi EC2 là gì", "EC2 là gì", "EC2 là gì"),   # lượt chính không viết tên: giữ nguyên
+])
+def test_wake_strip_name(matcher, wake, text, rest):
+    named = matcher.match(wake)
+    assert named.found and matcher.strip_name(text, named) == rest
+
+
+@pytest.mark.parametrize("text, out", [
+    ("Cảm ơn các bạn đã theo dõi và hẹn gặp lại.", ""),
+    ("Hãy subscribe cho kênh La La School Để không bỏ lỡ những video hấp dẫn", ""),
+    ("Hẹn gặp lại!", ""),
+    ("Thank you for watching.", ""),
+    ("Mở job hay. Cảm ơn các bạn đã xem video này.", "Mở job hay."),
+    ("Cảm ơn Mimi nhé.", "Cảm ơn Mimi nhé."),
+    ("sửa file app.js giúp mình", "sửa file app.js giúp mình"),
+])
+def test_drop_hallucinations(text, out):
+    assert drop_hallucinations(text) == out
 
 
 def test_handsfree_pause_after_name_is_still_question(tmp_path):

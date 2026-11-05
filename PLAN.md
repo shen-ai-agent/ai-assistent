@@ -31,6 +31,7 @@ AI-assistent/
 │   ├── stt/                # VAD, transcription, glossary, post-correction
 │   ├── tts/                # normalize, sentence split, synthesis
 │   ├── bridge/             # clipboard, claude_cli
+│   ├── agent/              # Phase 9: danh bạ dự án, mở VS Code, theo dõi log phiên Claude Code
 │   └── app.py              # FastAPI + WebSocket
 ├── web/                    # Frontend (React hoặc HTML thuần)
 ├── bench/                  # Script benchmark STT/TTS
@@ -214,6 +215,7 @@ AI-assistent/
 - [x] **Trợ lý rảnh tay (T-010):** mic luôn nghe (VAD Silero streaming), gọi tên "Mimi ơi" / "hey Mimi" thì đáp, ngừng nói thì trả lời; tab Mimi + tab Chi tiết. Bước A (Whisper tìm tên) xong; bước B (openWakeWord) chỉ làm nếu A không đạt DoD
 - [x] Ghi bộ test gọi tên (`data/wake_phrases.tsv`, 48 câu)
 - [ ] Ghi ≥30 phút âm nền, đo bằng `bench/wake_bench.py`
+- [x] **Tab Học bài (T-012, 04/11/2026):** dán text hoặc chọn file .txt/.md/.docx, Mimi đọc hết tài liệu, chia 3–8 phần, giảng từng phần bằng giọng nói, hết phần thì dừng hỏi; "tiếp", "giảng lại", "kiểm tra mình", hỏi chen giữa chừng. Thư viện lưu ở `_local/study/`, mỗi tài liệu một session Claude riêng, mở lại thì học tiếp
 - [x] Lệnh giọng nói (`server/assistant/commands.py`): "mở session mới", "dừng lại", "đọc lại" chạy ngay trên server, không hỏi Claude. Chỉ câu ngắn mới là lệnh
 - [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
@@ -296,10 +298,22 @@ AI-assistent/
 - [ ] Lượt đã sửa kèm audio tự vào bộ test cá nhân (`bench/build_personal_set.py`); chạy `stt_bench.py` định kỳ (mỗi tuần hoặc mỗi 50 bản sửa) lúc server rảnh, không chạy hai job GPU cùng lúc
 - [ ] Biểu đồ tiến bộ trên trang Đề xuất học: WER cá nhân theo tuần, số lỗi đã học
 - [ ] Fine-tune LoRA large-v3 khi có ≥ 2–3 giờ audio đã sửa ở dev (chuyển từ Phase 5); thử trước xem có vừa 12GB VRAM không
+- [ ] Kịch bản ghi âm cho LoRA lấy từ prompt người dùng đã gõ trong Claude Code (`~/.claude/projects/*/*.jsonl`, ~500 câu trộn Anh–Việt đúng văn phong), 40–50% câu trộn; giữ nhóm `en` để kiểm tra không tụt tiếng Anh
 
 **C. Gọi tên Mimi**
 - [ ] Gom audio gọi tên thật (`_local/logs/wake-*.jsonl`) thành bộ gọi tên lớn dần
 - [ ] Đủ vài trăm mẫu + âm nền: train openWakeWord riêng cho "Mimi" (bước B của T-010), so với bước A bằng `bench/wake_bench.py`
+
+**D. Hiểu ý giao việc** (Phase 9; dự án mới lúc đầu phải dạy, sau đó tự nhận)
+- [x] Nút "Sai rồi" trên tab Công việc: chọn lại dự án đúng / sửa câu yêu cầu → ghi nhãn (audio, câu nghe được, dự án đúng, yêu cầu đúng) vào `_local/logs/intents-*.jsonl`
+  - 01/11/2026: nút "Sai dự án" trên thẻ việc (message `task_fix`) giao lại ở dự án đúng. Nhãn có `turn_id` trỏ về `turns-*.jsonl` (audio, câu nghe được), `heard`, `query`, `project`, `wrong`, `request`, `via`
+  - Trả lời khi Mimi hỏi lại: "ừ / đúng rồi" (một ứng viên), "cái thứ hai", "không phải" rồi nói tên, hoặc bấm nút ứng viên (`command.choices`). Nói "sai rồi" / "không phải, X cơ" trong 2 phút sau khi giao việc: thôi theo dõi việc đó, hỏi lại hoặc giao sang X
+- [ ] Nhãn ngầm, không cần bấm: chọn ứng viên khi Mimi hỏi lại, ngừng theo dõi trong 30 giây đầu, nói lại câu gần giống ngay sau đó (01/11/2026: đã có nhãn khi chọn ứng viên / nói tên lúc Mimi hỏi lại; còn ngừng theo dõi sớm, nói lại câu gần giống)
+- [ ] Tự sinh biệt danh dự án (`_local/projects.toml`) khi cùng một cách nghe sai trỏ về cùng một dự án ≥ 2 lần ở dev, như rule corrections
+- [ ] `bench/intent_bench.py`: chấm kho nhãn theo dev/holdout (đúng dự án, đúng loại câu: việc / hỏi / tiến độ); mọi thay đổi alias, rule, prompt chỉ áp dụng khi không tụt
+- [ ] Bộ luật không chắc thì hỏi LLM nhỏ (Claude Haiku): danh sách dự án + vài ví dụ gần nhất lấy từ kho nhãn; LLM cũng không chắc thì Mimi hỏi lại
+- [ ] Job học hằng đêm lúc server rảnh: gom nhãn mới → đề xuất → chạy bench → tự áp dụng thứ qua kiểm tra, thứ chưa chắc đưa lên trang Đề xuất học
+- [ ] Số theo ngày trên trang Đề xuất học: tỉ lệ đúng dự án, số lần phải sửa trên 10 việc
 
 ### DoD
 - [ ] Từ đã duyệt cách đọc thì không bị đọc sai lại ở lần chấm sau
@@ -307,6 +321,45 @@ AI-assistent/
 - [ ] WER cá nhân trên holdout sau 1 tháng dùng thấp hơn lúc bắt đầu, có số theo từng tuần
 - [ ] Mọi thay đổi được áp dụng (lexicon, glossary, rule, model) có số trước/sau và gỡ lại được
 - [ ] Duyệt một đề xuất ≤ **2 chạm**
+- [ ] Giao việc: số lần phải sửa trên 10 việc giảm theo tuần; dự án mới nhận đúng sau ≤ **2** lần sửa
+
+---
+
+## Phase 9 — Giao việc cho VS Code
+
+**Mục tiêu:** nói "Mimi ơi, mở dự án job hay rồi thêm phân trang cho trang danh sách" → Mimi tìm đúng thư mục dự án, mở VS Code ở đó, đưa yêu cầu vào ô chat Claude Code, theo dõi tiến độ, xong thì đọc báo cáo ngắn. Chi tiết: [docs/tickets.md](docs/tickets.md) T-011.
+
+> Mimi không tự sửa code. Claude Code trong VS Code làm việc, người dùng vẫn duyệt quyền như bình thường. Mimi chỉ mở đúng chỗ, giao việc, đọc log phiên (`~/.claude/projects/<slug>/<session>.jsonl`) để báo tiến độ.
+
+### TODO
+**A1. Danh bạ dự án + lệnh "mở dự án X"**
+- [x] `server/agent/projects.py`: quét `[agent] roots` (mỗi thư mục con là một dự án), thêm dự án từng mở bằng Claude Code, biệt danh/loại trừ trong `_local/projects.toml`; tìm gần đúng theo tên đọc lên ("job hay" → `job-hay`)
+- [x] `server/agent/intent.py`: tách câu nói thành dự án + yêu cầu; câu hỏi kiến thức ("dự án là gì") vẫn đi tới Claude
+- [x] Hai dự án giống nhau hoặc không tìm thấy: Mimi hỏi lại / báo không tìm thấy, không mở bừa
+
+**A2. Giao việc + theo dõi + báo cáo**
+- [x] `server/agent/vscode.py`: mở VS Code ở thư mục dự án, mở tab Claude bằng URI `vscode://anthropic.claude-code/open?prompt=...` (chỉ điền sẵn), tự nhấn Enter khi cửa sổ đúng dự án ở trên cùng (`auto_submit`, tắt được)
+- [x] `server/agent/watcher.py`: đọc tăng dần log phiên, nhận ra lượt vừa gửi, báo từng bước tool, "chờ duyệt hoặc chạy lâu" khi tool chưa xong quá `stall_s`, kết thúc khi `end_turn`
+- [x] `server/agent/tasks.py`: `TaskManager` điều phối, broadcast cho mọi tab, đọc báo cáo bằng giọng khi tab rảnh, log `_local/tasks`
+- [x] Web: tab **Công việc** (chọn dự án + gõ yêu cầu, thẻ task có timeline bước, báo cáo, ngừng theo dõi, mở lại phiên trong VS Code); thẻ task trong chat Mimi
+
+**A2b. Giao việc bằng giọng nói ở tab Công việc**
+- [x] Đang ở tab Công việc (message `work`): mọi câu nói là giao việc, không hỏi Claude của Mimi; câu không nêu tên dự án thì làm ở dự án đang chọn, không chọn thì dự án của việc gần nhất, chưa có thì Mimi hỏi "làm ở dự án nào?" rồi nhận câu trả lời tên dự án
+- [x] Tên dự án mơ hồ: Mimi hỏi lại, câu trả lời kế tiếp (trong 90 giây) chọn dự án và giữ yêu cầu cũ
+- [x] Hỏi tiến độ ("tới đâu rồi", "xong chưa") và "ngừng theo dõi" bằng giọng nói, ở mọi tab khi đang có việc chạy
+- [x] Web: thanh giọng nói đầu tab (orb nhỏ, nút Rảnh tay, chọn dự án mặc định, câu bạn nói và câu Mimi đáp); form gõ tay thu vào "Gõ tay"
+- [x] STT nghe đúng tên dự án: ở tab Công việc, prompt Whisper thêm "Dự án: job hay, fruit rush, …" (30 dự án dùng gần nhất + biệt danh); câu thiếu từ "dự án" vẫn nhận tên ở bất kỳ đâu trong câu khi khớp chắc (≥ 0.85)
+- [x] Sửa theo lần thử thật 01/11/2026: (1) lượt dò tên đã nghe "Mimi" thì luôn bỏ tên khỏi câu, kể cả khi lượt nhận dạng chính viết tên khác ("Nhiên mê ơi, mở diễn."); (2) bỏ câu Whisper bịa khi audio là tiếng ồn ("Cảm ơn các bạn đã theo dõi…", "Hãy subscribe cho kênh…"); (3) câu ngắn "mở X" mà X không khớp chắc dự án nào thì hỏi lại kèm ứng viên ("guitar karaoke?"), không giao cho dự án đang chọn
+
+**Để sau**
+- [ ] A3: Mimi tự làm (Claude headless trong thư mục dự án, duyệt quyền qua web/giọng nói)
+- [ ] A4: điều khiển máy ngoài VS Code (mở app, trình duyệt...)
+
+### DoD
+- [ ] Thử thật: nói "mở dự án X rồi <yêu cầu chỉ đọc>" → VS Code mở đúng dự án, yêu cầu được gửi, tab Công việc hiện các bước, nghe báo cáo
+- [ ] Tìm đúng dự án ≥ **9/10** câu nói thật có tên dự án
+- [ ] Từ lúc nói xong đến lúc yêu cầu vào ô chat ≤ **10s** khi VS Code chưa mở
+- [ ] Không gửi Enter nhầm cửa sổ: cửa sổ trên cùng không phải VS Code đúng dự án thì chỉ điền sẵn và nhắc người dùng
 
 ---
 
@@ -319,7 +372,8 @@ AI-assistent/
 | 2 | Voice server + Web (STT) | 🟡 TODO xong; DoD trên trình duyệt chưa thực hiện: nói 10 câu, tự kết nối lại, chạy 1 giờ (T-002) |
 | 3 | TTS | ✅ 16/10/2026 — ZeroTTS GPU, giọng maichi, tiếng đầu ~80ms, VRAM 5.9GB (T-008) |
 | 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
-| 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền |
+| 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền. 04/11/2026: tab Học bài (T-012) |
 | 6 | Giọng của chính mình | ⬜ |
 | 7 | Dùng từ mọi thiết bị | 🟡 18/10/2026 — dùng được trong LAN qua HTTPS 8766, có PWA + giữ màn hình sáng; từ xa (4G) chưa làm |
-| 8 | Tự học dài hạn | 🟡 17/10/2026 — có kế hoạch; lexicon thêm TODO, README, PLAN.md… |
+| 8 | Tự học dài hạn | 🟡 01/11/2026 — có kế hoạch (thêm D: hiểu ý giao việc); D: nút Sai dự án, trả lời "ừ / cái thứ hai / sai rồi", ghi nhãn intents; lexicon thêm TODO, README, PLAN.md… |
+| 9 | Giao việc cho VS Code | 🟡 01/11/2026 — A1 + A2 + giao việc bằng giọng nói code xong (T-011); thử thật lần 1: sửa cắt tên, lọc câu ảo giác, hỏi lại khi "mở X" không rõ |

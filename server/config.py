@@ -63,6 +63,24 @@ class Config:
     assistant_active_timeout_s: float = 8   # đáp xong mà không nói gì trong chừng này giây thì ngủ lại
     assistant_follow_up_s: float = 6        # đọc xong câu trả lời, hỏi tiếp không cần gọi tên (0 = tắt)
     assistant_max_segment_s: float = 30
+    # Giao việc cho VS Code (T-011): mặc định tắt để test không mở VS Code; config.toml bật
+    agent_enabled: bool = False
+    agent_roots: list[Path] = field(default_factory=list)   # mỗi thư mục con là một dự án
+    agent_projects_file: Path = ROOT / "_local" / "projects.toml"   # biệt danh, loại trừ, dự án ngoài roots
+    agent_claude_dir: Path | None = None   # log phiên Claude Code; None = ~/.claude/projects
+    agent_code_exe: str = ""               # rỗng = tìm `code` trong PATH
+    agent_auto_submit: bool = True         # tự nhấn Enter vào ô chat Claude; false = chỉ điền sẵn
+    agent_window_wait_s: float = 15
+    agent_stall_s: float = 12              # tool chưa xong quá chừng này: báo "chờ duyệt hoặc chạy lâu"
+    agent_submit_timeout_s: float = 600    # chờ người dùng bấm Enter (khi chỉ điền sẵn)
+    agent_task_timeout_s: float = 7200     # thôi theo dõi sau chừng này
+    agent_log_dir: Path = ROOT / "_local" / "tasks"
+    # Tab Học (T-012): giảng tài liệu, dùng claude của [bridge] (cần kind = "claude_cli")
+    study_dir: Path = ROOT / "_local" / "study"          # mỗi tài liệu một thư mục, cũng là cwd của Claude
+    study_prompt: Path = ROOT / "prompts" / "study_reply.md"
+    study_tools: list[str] = field(default_factory=lambda: ["Read", "WebSearch", "WebFetch"])
+    study_timeout_s: float = 300   # lượt đầu phải đọc cả tài liệu
+    study_max_chars: int = 200_000
 
 
 _PATHS = ("bridge_workdir", "bridge_prompt", "bridge_log_dir")
@@ -76,7 +94,17 @@ def load_config(path: Path = DEFAULT_PATH) -> Config:
     bridge.update({k: ROOT / bridge[k] for k in _PATHS if k in bridge})
     assistant = {f"assistant_{k}": v for k, v in raw.get("assistant", {}).items()}
     server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key") if k in server})
-    cfg = Config(**server, **stt, **tts, **bridge, **assistant)
+    agent = {f"agent_{k}": v for k, v in raw.get("agent", {}).items()}
+    study = {f"study_{k}": v for k, v in raw.get("study", {}).items()}
+    study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt") if k in study})
+    agent.update({k: ROOT / agent[k] for k in ("agent_projects_file", "agent_log_dir") if k in agent})
+    if "agent_roots" in agent:
+        agent["agent_roots"] = [Path(p) for p in agent["agent_roots"]]
+    if agent.get("agent_claude_dir"):
+        agent["agent_claude_dir"] = Path(agent["agent_claude_dir"]).expanduser()
+    else:
+        agent.pop("agent_claude_dir", None)
+    cfg = Config(**server, **stt, **tts, **bridge, **assistant, **agent, **study)
     if "dir" in log:
         cfg.log_dir = ROOT / log["dir"]
     cfg.save_audio = log.get("save_audio", cfg.save_audio)

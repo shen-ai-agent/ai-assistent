@@ -50,6 +50,10 @@ class TurnLogger:
     def correction(self, turn_id: str, text: str):
         self._write({"event": "correction", "turn_id": turn_id, "text": text})
 
+    def intent(self, record: dict):
+        """Nhãn hiểu ý giao việc (câu nghe được → dự án đúng) vào intents-YYYY-MM-DD.jsonl, xem agent/tasks.py."""
+        self._write(record, "intents")
+
     def _write(self, record: dict, kind: str = "turns"):
         self.dir.mkdir(parents=True, exist_ok=True)
         record = {"ts": datetime.now().isoformat(timespec="milliseconds"), **record}

@@ -237,11 +237,145 @@ body:not([data-orb]) .aura, #tab-mimi[hidden] .aura { display: none; }
 .wave.on path { animation: bars 1s ease-in-out infinite; transform-origin: center; }
 @keyframes bars { 50% { transform: scaleY(.6); } }
 
+/* ---------- Tab Công việc: giao việc cho Claude Code trong VS Code ---------- */
+.tabs a { white-space: nowrap; }
+.tabs .badge { margin-left: 3px; }
+/* Thanh giọng nói: orb nhỏ (cùng trạng thái với orb tab Mimi), nút Rảnh tay, dự án mặc định, lượt nói gần nhất */
+.work-voice { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.work-head { display: flex; align-items: center; gap: 16px; }
+.orb.mini { width: 64px; height: 64px; margin: 6px; }
+.orb.mini .fog { filter: blur(8px); }
+.orb.mini .r4 { filter: blur(3px); }
+.work-text { flex: 1; min-width: 0; }
+.work-text .orb-status { margin: 0 0 2px; text-align: left; font-size: 15px; color: #c7cede; }
+.work-text .orb-status:empty::before { content: "Đang nói…"; }
+#work-hf { border: 1px solid #333a46; }
+.work-text .hint { margin: 0; }
+.work-project-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.work-project-row label { color: var(--muted); font-size: 14px; }
+.work-project-row select { flex: 1; min-width: 0; }
+.work-log { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 10px 0 0; padding-top: 10px;
+  border-top: 1px solid var(--line); }
+.work-log dt { color: var(--muted); font-size: 13px; padding-top: 2px; }
+.work-log dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.work-log dd.dim { opacity: .55; }
+/* Nút chọn dự án khi Mimi hỏi lại: ở tab Công việc và trong bong bóng hội thoại */
+.choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.choices button { padding: 4px 12px; font-size: 13.5px; border-radius: 999px; }
+.choices button:disabled { opacity: .45; }
+.task-manual { margin-top: 10px; }
+.task-manual summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 4px 0; }
+.task-form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 6px; }
+.task-form h2 { margin: 0 0 2px; }
+.task-form .hint { margin: 4px 0 8px; }
+.task-project-row { display: flex; gap: 8px; }
+.task-project-row select { flex: 1; min-width: 0; }
+#task-refresh { padding: 4px 12px; font-size: 15px; }
+#task-text { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333a46; border-radius: 8px;
+  padding: 8px; font: 15px/1.4 system-ui, sans-serif; resize: vertical; }
+.task-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+#task-note { margin-left: auto; }
+#task-empty { margin: 16px 2px; font-size: 13px; }
+.task-list { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 12px; }
+.task { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid #333a46; border-radius: 10px;
+  padding: 12px 14px; min-width: 0; }
+.task.st-opening, .task.st-running { border-left-color: var(--accent); }
+.task.st-prefilled, .task.st-waiting { border-left-color: var(--warn); }
+.task.st-done { border-left-color: var(--ok); }
+.task.st-failed, .task.st-interrupted { border-left-color: var(--bad); }
+.task-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-project { font-weight: 600; overflow-wrap: anywhere; }
+.task-elapsed { margin-left: auto; font: 12px ui-monospace, monospace; color: var(--muted); }
+.task-path { margin-top: 2px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.task-request { margin: 8px 0; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.task-banner { margin: 8px 0; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--muted); background: #141821; }
+.task-banner.attn { color: #fde68a; background: rgba(251, 191, 36, .12); border: 1px solid rgba(251, 191, 36, .45); }
+.task-steps-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px;
+  font-size: 12px; color: var(--muted); }
+button.link { background: none; border: none; padding: 0; color: var(--accent); font-size: 12px; }
+.task-steps { list-style: none; margin: 4px 0 0; padding: 0; max-height: 280px; overflow-y: auto; font-size: 13px;
+  overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #2a3040 transparent; }
+.task-steps li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; min-width: 0; }
+.task-steps .icon { flex: none; width: 14px; text-align: center; color: var(--muted); }
+.task-steps .ok .icon { color: var(--ok); }
+.task-steps .fail .icon { color: var(--bad); }
+.task-steps .run .icon::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+.task-steps .tool { flex: none; font: 600 12px ui-monospace, monospace; color: #c7cede; }
+.task-steps .sum { min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-steps .run .sum { color: var(--text); }
+.task-steps .fail .sum { color: #fca5a5; }
+.task-report { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--ok); border-radius: 0 8px 8px 0;
+  background: #141821; font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; max-height: 480px; overflow-y: auto; }
+.task-report.bad { border-left-color: var(--bad); }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol { margin: 0 0 8px; }
+.md ul, .md ol { padding-left: 20px; }
+.md h4 { margin: 12px 0 4px; font-size: 14px; }
+.md hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
+.md code, .task-files code { font: 12.5px ui-monospace, monospace; background: #0b0d11; border: 1px solid #262a33;
+  border-radius: 4px; padding: 0 4px; }
+.md pre { margin: 0 0 8px; padding: 10px; background: #07090d; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+.md pre code { background: none; border: none; padding: 0; white-space: pre; }
+.md h5 { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+.md li > ul, .md li > ol { margin: 2px 0 4px; }
+.md a { color: #93c5fd; }
+.md blockquote { margin: 0 0 8px; padding: 2px 0 2px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.md .table-wrap { margin: 0 0 8px; overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: 13px; line-height: 1.45; min-width: 60%; }
+.md th, .md td { padding: 5px 9px; border: 1px solid var(--line); text-align: left; vertical-align: top;
+  overflow-wrap: normal; }
+.md th { background: #141821; font-weight: 600; white-space: nowrap; }
+.md tbody tr:nth-child(even) td { background: #ffffff06; }
+.task-files { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.task-files code { color: #c7cede; overflow-wrap: anywhere; }
+.task-meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.task-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.task-actions:not(:has(button:not([hidden]))) { display: none; }
+.task-fix-form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.task-fix-form[hidden] { display: none; }
+.task-fix-form select { flex: 1 1 160px; min-width: 0; }
+.task-fix-form input { flex: 3 1 220px; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid #333a46;
+  border-radius: 8px; padding: 6px 8px; font: 14px system-ui, sans-serif; }
+
+/* Chip trạng thái task: dùng ở thẻ tab Công việc và thẻ gọn trong hội thoại */
+.tstat { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 999px;
+  font-size: 11.5px; line-height: 1.6; white-space: nowrap; color: var(--muted); background: rgba(119, 127, 145, .16); }
+.tstat.st-opening, .tstat.st-running { color: #c4b5fd; background: rgba(167, 139, 250, .16); }
+.tstat.st-opening::before, .tstat.st-running::before { content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; animation: typing 1.2s ease-in-out infinite; }
+.tstat.st-prefilled, .tstat.st-waiting { color: var(--warn); background: rgba(251, 191, 36, .14); }
+.tstat.st-done { color: var(--ok); background: rgba(74, 222, 128, .14); }
+.tstat.st-failed, .tstat.st-interrupted { color: var(--bad); background: rgba(248, 113, 113, .14); }
+
+/* Thẻ gọn trong hội thoại tab Mimi, bấm để sang tab Công việc */
+.msg.task-msg { align-self: flex-start; max-width: min(680px, 92%); }
+.task-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; padding: 9px 14px;
+  border-radius: 14px; font-size: 14px; line-height: 1.5; color: var(--text); text-decoration: none;
+  background: rgba(23, 26, 34, .85); border: 1px dashed #3a4152; backdrop-filter: blur(8px); }
+.task-pill:hover { border-color: var(--accent); }
+.task-pill .head { min-width: 0; overflow-wrap: anywhere; }
+.task-pill .req { color: #c7cede; }
+.task-pill .task-sum { color: var(--muted); font-size: 12.5px; }
+
 /* ---------- Điện thoại ---------- */
 @media (max-width: 640px) {
   header { padding: 8px 12px; gap: 8px; min-height: 56px; }
   .tagline, h1 { display: none; }
   .tabs a { padding: 5px 11px; }
+  .tabs:has(#tasks-tab:not([hidden])) a { padding: 5px 9px; } /* ba tab: thu hẹp cho vừa màn hình nhỏ */
+  .task-form, .work-voice { padding: 12px; }
+  .work-head { gap: 10px; }
+  .orb.mini { width: 48px; height: 48px; }
+  #task-note { margin-left: 0; flex-basis: 100%; }
+  .task { padding: 10px 12px; }
+}
+/* Màn hình rất hẹp có ba tab: chip kết nối chỉ còn chấm màu (trạng thái chữ vẫn ở dòng dưới orb) */
+@media (max-width: 400px) {
+  .tabs:has(#tasks-tab:not([hidden])) a { padding: 5px 7px; font-size: 12.5px; }
+  header:has(#tasks-tab:not([hidden])) .state { display: none; }
+  header:has(#tasks-tab:not([hidden])) .chip { padding: 7px; }
   .nav { margin-right: 0; }
   main { padding: 14px; }
   .assistant { height: calc(100dvh - 56px); padding: 0 12px; }
@@ -259,3 +393,81 @@ body:not([data-orb]) .aura, #tab-mimi[hidden] .aura { display: none; }
 #heard-log li.wake { color: var(--text); }
 #heard-log .tag { font-size: 11px; border-radius: 4px; padding: 0 5px; background: #262a33; margin-right: 6px; }
 #heard-log li.wake .tag { color: var(--ok); }
+
+/* ---------- Tab Học bài: thư viện tài liệu + giảng từng phần ---------- */
+.study { max-width: 860px; }
+.study-form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.study-form h2 { margin: 0 0 2px; }
+.study-form .hint { margin: 4px 0 10px; line-height: 1.5; }
+#study-title, #study-text { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333a46; border-radius: 8px;
+  padding: 8px; font: 15px/1.4 system-ui, sans-serif; }
+#study-title { margin-bottom: 8px; }
+#study-text { resize: vertical; }
+.study-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+.file-btn { display: inline-block; padding: 6px 14px; border-radius: 6px; font-size: 13.3px; cursor: pointer; }
+.file-btn.secondary { color: var(--muted); border: 1px solid #333a46; }
+.file-btn.secondary:hover { color: var(--text); }
+.file-btn.busy { opacity: .5; pointer-events: none; }
+#study-empty { margin: 8px 2px; font-size: 13px; }
+.study-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
+.doc-card { display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  min-width: 0; }
+.doc-card:hover { border-color: #3a4152; }
+.doc-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; text-align: left;
+  background: none; color: var(--text); border-radius: 10px 0 0 10px; }
+.doc-title { font-weight: 600; overflow-wrap: anywhere; }
+.doc-meta { font-size: 12px; color: var(--muted); }
+.doc-progress { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c7cede; margin-top: 2px; }
+.doc-progress .bar { flex: 0 0 90px; }
+.doc-actions { flex: none; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 14px; }
+button.link.danger { color: var(--bad); }
+.bar { display: block; height: 4px; background: #262a33; border-radius: 2px; overflow: hidden; }
+.bar > * { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+
+/* Đang mở một tài liệu: cả tab là một cột cao bằng màn hình như tab Mimi */
+.study:has(#study-doc:not([hidden])) { height: calc(100dvh - 64px); display: flex; flex-direction: column; padding: 0 16px; }
+.study-doc { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.study-head { flex: none; display: flex; align-items: center; gap: 10px; padding-top: 10px; }
+#study-back { padding: 6px 12px; font-size: 16px; }
+.study-head .orb.mini { width: 48px; height: 48px; margin: 4px; }
+.study-title { flex: 1; min-width: 0; }
+.study-title h2 { margin: 0; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.study-title .orb-status { margin: 2px 0 0; font-size: 13px; }
+.study-title .orb-status:empty::before { content: "Đang giảng…"; }
+#study-hf { border: 1px solid #333a46; }
+.study-progress { flex: none; display: flex; align-items: center; gap: 10px; margin: 8px 0 0; }
+.study-progress .bar { flex: 0 0 120px; }
+.study-progress .hint { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.study-source { flex: none; margin-top: 6px; }
+.study-source summary { cursor: pointer; padding: 2px 0; }
+#study-source-text { max-height: 40vh; overflow-y: auto; margin-top: 6px; padding: 10px 12px; color: var(--text);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; line-height: 1.55;
+  overflow-wrap: anywhere; }
+.study-doc .chat { display: flex; flex: 1; }
+.study-doc .chat:empty::before { content: "Bấm Bắt đầu học để nghe giảng phần 1."; margin: auto; color: var(--muted); font-size: 14px; }
+.msg .notes { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
+  background: #10131a; font-size: 14px; line-height: 1.55; white-space: normal; }
+.study-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
+.study-quick button { padding: 5px 13px; font-size: 13.5px; border-radius: 999px; background: rgba(23, 26, 34, .85);
+  color: #c7cede; border: 1px solid #333a46; }
+.study-quick button.main { background: var(--accent-2); color: #fff; border-color: transparent; }
+.study-quick button:disabled { opacity: .45; }
+#study-stop svg { width: 18px; height: 18px; stroke: none; }
+#study-stop:disabled { display: none; }
+#study-composer { padding-right: 8px; }
+
+@media (max-width: 640px) {
+  .tabs:has(#study-tab:not([hidden])) a { padding: 5px 9px; }
+  .study:has(#study-doc:not([hidden])) { height: calc(100dvh - 56px); padding: 0 12px; }
+  .study-progress .bar { flex-basis: 70px; }
+  .doc-actions { padding: 0 10px; }
+}
+@media (max-width: 400px) {
+  .tabs:has(#study-tab:not([hidden])) a { padding: 5px 7px; font-size: 12.5px; }
+  header:has(#study-tab:not([hidden])) .state { display: none; }
+  header:has(#study-tab:not([hidden])) .chip { padding: 7px; }
+}
+/* Bốn tab không đủ chỗ cho link Đề xuất trên điện thoại; trang đó vẫn mở được từ tab Chi tiết */
+@media (max-width: 480px) {
+  header:has(#study-tab:not([hidden])) .nav { display: none; }
+}

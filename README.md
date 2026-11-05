@@ -82,7 +82,7 @@ Chứng chỉ này chỉ dùng cho server ở nhà; khoá riêng `lan.key` khôn
 
 ### Đề xuất học (T-007)
 
-Link "Đề xuất học" ở góc trên trang Nói (số đỏ là số đề xuất đang chờ), hoặc http://127.0.0.1:8765/learn.html.
+Link "Đề xuất" ở góc trên trang (số đỏ là số đề xuất đang chờ; ẩn trên điện thoại màn hẹp), hoặc http://127.0.0.1:8765/learn.html.
 
 - Lỗi bạn sửa ở **≥2 lượt** thành đề xuất: *thuật ngữ* (thêm vào glossary của một chủ đề) hoặc *rule* (thêm vào `data/corrections.tsv`). Sửa một lần thì chưa học.
 - Khoảng 30% lượt nói là holdout, chỉ dùng để kiểm chứng, không sinh đề xuất. Chỉ học thuật ngữ / từ tiếng Anh, không học lỗi giữa các từ tiếng Việt.
@@ -174,3 +174,39 @@ Tab **Mimi** (mặc định) là giao diện trợ lý; tab **Chi tiết** là g
 ```
 
 Benchmark dùng cả 100 câu `data/testset` làm câu âm tính (không có tên). Chỉ sửa `aliases`/ngưỡng theo lỗi ở **dev**.
+
+## Giao việc cho VS Code (T-011)
+
+Nói (hoặc gõ ở tab Mimi / tab **Công việc**) kiểu "Mimi ơi, mở dự án job hay rồi thêm phân trang cho trang danh sách". Mimi tìm thư mục dự án, mở VS Code ở đó, mở tab Claude Code với yêu cầu đã điền, tự nhấn Enter, rồi theo dõi log phiên (`~/.claude/projects`) để báo từng bước và đọc báo cáo khi xong.
+
+- Câu cần có "dự án" / "project" / "vs code". Câu hỏi ("dự án là gì", "làm sao mở project trong vs code") vẫn gửi cho Claude như thường.
+- "mở dự án job hay" (không có yêu cầu) thì chỉ mở VS Code. Tên mơ hồ ("mở dự án job") thì Mimi hỏi lại, không mở bừa.
+- Claude Code trong VS Code vẫn hỏi duyệt quyền như bình thường. Tool chạy quá `stall_s` mà chưa xong thì Mimi báo "đang chờ bạn duyệt, hoặc đang chạy lệnh lâu".
+- Mimi chỉ nhấn Enter khi cửa sổ trên cùng đúng là VS Code của dự án. Không thì yêu cầu chỉ được điền sẵn, bạn tự bấm Enter (`auto_submit = false` để luôn như vậy).
+- Tab **Công việc**: bật Rảnh tay rồi gọi "Mimi ơi" và nói việc cần làm. Ở tab này mọi câu là giao việc, không cần chữ "dự án": câu không nêu tên dự án thì làm ở dự án đang chọn trong ô **Dự án**, không chọn thì dự án của việc gần nhất, chưa có thì Mimi hỏi "làm ở dự án nào?" và bạn chỉ cần nói tên. Ô **Gõ tay** để gõ khi không tiện nói.
+- Ở tab Công việc, Whisper được gợi ý tên các dự án (30 dự án dùng gần nhất và biệt danh) nên nghe đúng tên hơn. Tên vẫn sai thì thêm biệt danh trong `_local/projects.toml` (bên dưới).
+- Hỏi "tới đâu rồi", "xong chưa" thì Mimi đọc tiến độ việc gần nhất; "ngừng theo dõi" thì thôi theo dõi (ở tab Mimi cũng được khi đang có việc chạy).
+- Thẻ task có các bước, báo cáo, file đã sửa; "Ngừng theo dõi" không dừng Claude trong VS Code; "Mở trong VS Code" mở lại đúng phiên.
+- Cấu hình ở bảng `[agent]` của `server/config.toml`: `roots` (mỗi thư mục con là một dự án, thư mục nhóm như `D:/projects/Shen` thì lấy các thư mục con), `code_exe`, `auto_submit`, thời gian chờ. Log task: `_local/tasks/`.
+
+Tên đọc lên quá khác tên thư mục thì thêm biệt danh trong `_local/projects.toml` (đọc lại sau tối đa 30 giây):
+
+```toml
+exclude = ["old-stuff", "D:/projects/tmp"]     # tên hoặc đường dẫn không coi là dự án
+
+[aliases]                                      # theo tên hiển thị, tên thư mục hoặc đường dẫn
+"Track6-S2T" = ["track sáu", "tờ rác sáu"]
+sdesign = "sơ đi zai"
+
+[extra]                                        # dự án nằm ngoài roots
+"ghi chú" = "D:/notes"
+```
+
+## Học bài (T-012)
+
+Tab **Học bài**: gửi tài liệu học, Mimi đọc hiểu rồi giảng lại từng phần. Cần `[bridge] kind = "claude_cli"`.
+
+- Thêm tài liệu: dán text hoặc chọn file `.txt` / `.md` / `.docx` (tối đa 200.000 ký tự). Lưu xong Mimi tự bắt đầu: nói tài liệu có mấy phần rồi giảng phần 1.
+- Mỗi lượt giảng một phần, cuối phần Mimi hỏi lại. Nói "tiếp" để sang phần sau, "giảng lại" nếu chưa hiểu, "kiểm tra mình" để được hỏi bài; hỏi chen bất cứ lúc nào (giữ Space, gõ, hoặc Rảnh tay). Các nút nhanh dưới hội thoại làm việc tương tự.
+- Ghi chú (ý chính, thuật ngữ, code) hiện dưới câu trả lời, không đọc. "Xem tài liệu" để mở bản gốc.
+- Thư viện lưu trong `_local/study/<id>/`; mở lại tài liệu là học tiếp đúng chỗ (mỗi tài liệu một session Claude riêng). "Học lại từ đầu" xoá tiến độ và lịch sử.

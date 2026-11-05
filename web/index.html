@@ -24,10 +24,12 @@
   </div>
   <nav class="tabs">
     <a href="#mimi" data-tab="mimi">Mimi</a>
+    <a href="#tasks" data-tab="tasks" id="tasks-tab" hidden>Công việc <span id="tasks-count" class="badge" hidden></span></a>
+    <a href="#study" data-tab="study" id="study-tab" hidden>Học bài</a>
     <a href="#detail" data-tab="detail">Chi tiết</a>
   </nav>
   <div class="status">
-    <a href="learn.html" class="nav" title="Đề xuất học">Học <span id="learn-count" class="badge" hidden></span></a>
+    <a href="learn.html" class="nav" title="Đề xuất học từ bản sửa transcript">Đề xuất <span id="learn-count" class="badge" hidden></span></a>
     <span class="chip" title="Kết nối server"><span id="conn" class="dot"></span><span id="state" class="state">…</span></span>
   </div>
 </header>
@@ -71,6 +73,112 @@
       </button>
     </form>
   </div>
+</main>
+
+<main id="tab-tasks" class="tab tasks" hidden>
+  <section class="work-voice">
+    <div class="work-head">
+      <div id="work-orb" class="orb mini off" aria-hidden="true">
+        <div class="halo"></div>
+        <div class="sphere"><i class="fog"></i><i class="r1"></i><i class="r2"></i><i class="r3"></i><i class="r4"></i></div>
+      </div>
+      <div class="work-text">
+        <p id="work-status" class="orb-status">…</p>
+        <p class="hint">Gọi "<span class="wake-name">Mimi</span> ơi" rồi nói việc cần làm. Ở tab này mọi câu là giao việc:
+          "thêm phân trang cho trang danh sách", "dự án fruit rush, viết test cho game loop",
+          "tới đâu rồi", "ngừng theo dõi".</p>
+      </div>
+      <button id="work-hf" type="button" class="icon-btn wave" disabled title="Rảnh tay: mic luôn nghe, gọi tên để giao việc">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2M7 8v8M11 4v16M15 8v8M19 10v4" fill="none" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="label">Rảnh tay</span>
+      </button>
+    </div>
+    <div class="work-project-row">
+      <label for="task-project">Dự án</label>
+      <select id="task-project" title="Câu không nêu tên dự án thì làm ở dự án này"><option value="">Dự án vừa làm (hoặc nêu tên trong câu)</option></select>
+      <button id="task-refresh" type="button" class="secondary" disabled title="Làm mới danh sách dự án" aria-label="Làm mới danh sách dự án">↻</button>
+    </div>
+    <p id="task-project-info" class="hint"></p>
+    <dl id="work-log" class="work-log" hidden>
+      <dt>Bạn</dt><dd id="work-you"></dd>
+      <dt class="wake-name">Mimi</dt><dd id="work-mimi"></dd>
+    </dl>
+    <div id="work-choices" class="choices" hidden></div>
+  </section>
+  <details class="task-manual">
+    <summary>Gõ tay</summary>
+    <form id="task-form" class="task-form" autocomplete="off">
+      <textarea id="task-text" rows="3" spellcheck="false"
+        placeholder="Ví dụ: mở dự án job hay rồi thêm phân trang cho trang danh sách việc"></textarea>
+      <div class="task-bar">
+        <button id="task-send" type="submit" disabled>Giao cho VS Code</button>
+        <span class="hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd></span>
+        <span id="task-note" class="hint"></span>
+      </div>
+    </form>
+  </details>
+  <p id="task-empty" class="empty">Chưa giao việc nào.</p>
+  <ol id="task-list" class="task-list"></ol>
+</main>
+
+<main id="tab-study" class="tab study" hidden>
+  <section id="study-lib" class="study-lib">
+    <form id="study-form" class="study-form" autocomplete="off">
+      <h2>Thêm tài liệu</h2>
+      <p class="hint">Dán nội dung bài học hoặc chọn file <code>.txt</code>, <code>.md</code>, <code>.docx</code>.
+        <span class="wake-name">Mimi</span> đọc hết, chia thành từng phần rồi giảng lần lượt, hết mỗi phần dừng hỏi bạn.</p>
+      <input id="study-title" type="text" placeholder="Tên tài liệu (để trống thì lấy dòng đầu)">
+      <textarea id="study-text" rows="6" spellcheck="false" placeholder="Dán nội dung tài liệu vào đây…"></textarea>
+      <div class="study-bar">
+        <button id="study-add" type="submit" disabled>Lưu và bắt đầu học</button>
+        <label class="file-btn secondary" title="Chọn file là lưu luôn">Chọn file…<input id="study-file" type="file" accept=".txt,.md,.markdown,.docx" hidden></label>
+        <span id="study-note" class="hint"></span>
+      </div>
+    </form>
+    <h2>Thư viện</h2>
+    <p id="study-empty" class="empty">Chưa có tài liệu nào.</p>
+    <ol id="study-list" class="study-list"></ol>
+  </section>
+
+  <section id="study-doc" class="study-doc" hidden>
+    <div class="study-head">
+      <button id="study-back" type="button" class="secondary" title="Về thư viện">←</button>
+      <div id="study-orb" class="orb mini off" aria-hidden="true">
+        <div class="halo"></div>
+        <div class="sphere"><i class="fog"></i><i class="r1"></i><i class="r2"></i><i class="r3"></i><i class="r4"></i></div>
+      </div>
+      <div class="study-title">
+        <h2 id="study-doc-title"></h2>
+        <p id="study-status" class="orb-status">…</p>
+      </div>
+      <button id="study-hf" type="button" class="icon-btn wave" disabled title="Rảnh tay: mic luôn nghe, gọi tên rồi hỏi về bài">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v2M7 8v8M11 4v16M15 8v8M19 10v4" fill="none" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="label">Rảnh tay</span>
+      </button>
+    </div>
+    <div class="study-progress">
+      <div class="bar"><div id="study-bar"></div></div>
+      <span id="study-progress" class="hint"></span>
+      <button id="study-reset" type="button" class="link" title="Mimi quên bài đã giảng, chia phần và giảng lại từ phần 1">Học lại từ đầu</button>
+    </div>
+    <details id="study-source" class="study-source">
+      <summary>Xem tài liệu</summary>
+      <div id="study-source-text" class="md"></div>
+    </details>
+
+    <ol id="study-chat" class="chat" aria-live="polite"></ol>
+
+    <div class="bottom">
+      <div id="study-quick" class="study-quick"></div>
+      <p id="study-error" class="error center" hidden></p>
+      <form id="study-composer" class="composer" autocomplete="off">
+        <input id="study-input" type="text" enterkeyhint="send" placeholder="Hỏi về bài, hoặc nói &quot;tiếp&quot;…" disabled>
+        <button id="study-stop" type="button" class="icon-btn" disabled title="Dừng nghĩ / dừng đọc (Esc)" aria-label="Dừng">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </form>
+    </div>
+  </section>
 </main>
 
 <main id="tab-detail" class="tab" hidden>
@@ -144,7 +252,52 @@
 
 <template id="msg-tpl">
   <!-- viết liền một dòng: khoảng trắng giữa thẻ sẽ thành dòng trống trong bong bóng -->
-  <li class="msg mimi"><span class="orb-mini" aria-hidden="true"><i></i></span><div class="bubble"><div class="text"></div><div class="code-wrap" hidden><button type="button" class="copy">Chép</button><pre></pre></div></div></li>
+  <li class="msg mimi"><span class="orb-mini" aria-hidden="true"><i></i></span><div class="bubble"><div class="text"></div><div class="code-wrap" hidden><button type="button" class="copy">Chép</button><pre></pre></div><div class="notes md" hidden></div></div></li>
+</template>
+
+<template id="doc-tpl">
+  <li class="doc-card">
+    <button type="button" class="doc-open">
+      <span class="doc-title"></span>
+      <span class="doc-meta"></span>
+      <span class="doc-progress"><span class="bar"><span class="fill"></span></span><span class="doc-part"></span></span>
+    </button>
+    <div class="doc-actions">
+      <button type="button" class="link doc-rename">Đổi tên</button>
+      <button type="button" class="link danger doc-delete">Xoá</button>
+    </div>
+  </li>
+</template>
+
+<template id="task-tpl">
+  <li class="task">
+    <div class="task-head">
+      <span class="tstat"></span>
+      <span class="task-project"></span>
+      <span class="task-elapsed"></span>
+    </div>
+    <div class="task-path"></div>
+    <p class="task-request"></p>
+    <div class="task-banner" hidden></div>
+    <div class="task-steps-wrap" hidden>
+      <div class="task-steps-bar"><span class="task-steps-title"></span><button type="button" class="link task-all"></button></div>
+      <ol class="task-steps"></ol>
+    </div>
+    <div class="task-report md" hidden></div>
+    <div class="task-files" hidden></div>
+    <div class="task-meta"></div>
+    <div class="task-actions">
+      <button type="button" class="secondary task-cancel" title="Mimi thôi theo dõi; Claude trong VS Code vẫn chạy tiếp">Ngừng theo dõi</button>
+      <button type="button" class="secondary task-open">Mở trong VS Code</button>
+      <button type="button" class="secondary task-fix" title="Mimi hiểu nhầm dự án: chọn dự án đúng để giao lại, Mimi ghi nhớ để lần sau hiểu đúng">Sai dự án</button>
+    </div>
+    <div class="task-fix-form" hidden>
+      <select class="task-fix-project" aria-label="Dự án đúng"></select>
+      <input class="task-fix-request" type="text" aria-label="Yêu cầu" placeholder="Yêu cầu (để trống = chỉ mở dự án)">
+      <button type="button" class="task-fix-send">Giao lại</button>
+      <button type="button" class="secondary task-fix-close">Huỷ</button>
+    </div>
+  </li>
 </template>
 
 <script type="module" src="app.js"></script>

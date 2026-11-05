@@ -14,6 +14,8 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 | T-008 | TTS: chọn model, chuẩn hoá text, stream về web | 3 | ✅ 16/10/2026 |
 | T-009 | Claude bridge: clipboard + Claude Code headless, stream câu trả lời sang TTS | 4 | 🟡 code xong, còn dùng thật |
 | T-010 | Trợ lý rảnh tay: gọi tên "Mimi", tab Mimi | 5 | 🟡 bước A code xong, chờ ghi bộ test gọi tên |
+| T-011 | Giao việc cho VS Code: mở dự án, đưa yêu cầu vào chat Claude, theo dõi, báo cáo | 9 | 🟡 code xong, chưa thử thật |
+| T-012 | Tab Học bài: gửi tài liệu, Mimi giảng lại từng phần | 5 | 🟡 04/11/2026 code xong, thử thật qua WebSocket; chưa dùng thật trên trình duyệt |
 
 ---
 
@@ -194,3 +196,80 @@ Việc cần làm tiếp, kèm bối cảnh để quay lại sau vẫn hiểu. �
 - Người dùng ghi bộ gọi tên (48 câu, khoảng 5 phút) và ít nhất 30 phút âm nền, rồi chạy `wake_bench.py`. Chỉ sửa alias/ngưỡng theo lỗi ở dev.
 - Thử trên trình duyệt với loa ngoài, không tai nghe. Nếu tiếng loa vẫn đánh thức nhầm hoặc bị nhận thành câu hỏi thì cân nhắc bước B.
 - Chưa có: đổi tên trợ lý trên web, nhận diện giọng người nói.
+
+---
+
+## T-011: Giao việc cho VS Code: mở dự án, đưa yêu cầu vào chat Claude, theo dõi, báo cáo
+
+**Bối cảnh.** Người dùng muốn Mimi "điều khiển máy": giao việc → làm → báo cáo. Người dùng làm việc chủ yếu trong VS Code với Claude Code, nên bước đầu là: hiểu dự án nằm ở đâu, mở VS Code đúng dự án, đưa yêu cầu vào ô chat Claude. Mimi không tự sửa code; Claude Code trong VS Code làm, người dùng vẫn duyệt quyền như bình thường.
+
+**Spike (31/10/2026, extension Claude Code 2.1.314).**
+- URI `vscode://anthropic.claude-code/open?prompt=<urlencoded>&session=<id>` mở tab Claude **mới** với prompt **điền sẵn, không tự gửi**. URI rơi vào cửa sổ VS Code được focus gần nhất, nên phải đưa đúng cửa sổ lên trước.
+- Log phiên: `~/.claude/projects/<slug>/<sessionId>.jsonl`, slug = đường dẫn thay mọi ký tự không phải chữ/số bằng `-`; chữ ổ đĩa có thể hoa hoặc thường. Lượt người dùng có `entrypoint: "claude-vscode"`; `assistant` có `stop_reason` `tool_use` / `end_turn`; `tool_result` cho biết bước xong.
+- Lúc chờ duyệt quyền, log không có dấu hiệu riêng: chỉ thấy `tool_use` chưa có `tool_result`. Nên "chờ duyệt" và "lệnh chạy lâu" không phân biệt được.
+
+**Đã làm (A1 + A2, làm song song bằng 3 agent).**
+- `server/agent/projects.py`: quét `roots` hai tầng (thư mục nhóm như `Shen/` thì lấy thư mục con), nhận dự án theo file đánh dấu (.git, README, package.json, *.csproj…) hoặc đã có log Claude; mô tả, stack, lần dùng Claude gần nhất. So tên trên chuỗi đã `fold`, bỏ khoảng trắng. Trên máy thật: 26 dự án, quét lần đầu 600ms, sau đó ~24ms. "job hay" → job-hay 1.0; "AI assistant" → AI-assistent 0.9; "gion không hai" → job-khong-hay 0.75.
+- `server/agent/intent.py`: chọn chắc khi điểm ≥ 0.75 và hơn ứng viên thứ hai ≥ 0.1, không thì hỏi lại (≤ 3 ứng viên). Câu hỏi ("là gì", "làm sao", "cách…") trả None. Không khớp dự án nào thì chỉ coi là giao việc khi có động từ mở/chuyển trước từ khoá.
+- `server/agent/vscode.py`: chạy thẳng `Code.exe` + `cli.js` đọc từ `code.cmd` (không qua cmd.exe), chờ cửa sổ có tiêu đề khớp thư mục (so theo đoạn, "job" không khớp "job-hay"), đưa lên trên cùng, mở URI, rồi gửi Enter nếu cửa sổ trên cùng vẫn đúng. Không đưa lên được thì không mở URI (tránh rơi vào dự án khác).
+- `server/agent/watcher.py`: đọc tăng dần các file `.jsonl`, tìm lượt có text khớp yêu cầu (bỏ block `<ide_…>`), phát bước tool, `Waiting` khi tool chưa xong quá `stall_s`, `Finished` khi `end_turn` (kèm text cuối, số tool, file đã sửa), `NotSubmitted` sau `submit_timeout_s`. Đã thử chỉ đọc trên một phiên cũ thật: nhận đúng các bước và câu trả lời cuối.
+- `server/agent/tasks.py` + `server/app.py`: lệnh `dev_task` đáp ngay ("Mình mở dự án X và giao việc cho Claude trong VS Code."), task chạy nền, gửi `task_*` cho mọi tab, đọc báo cáo bằng giọng khi tab rảnh. Protocol trong `server/protocol.py`.
+- Web: tab **Công việc**, thẻ task trong chat Mimi.
+- Test: `tests/test_agent_projects.py`, `tests/test_agent_watcher.py`, `tests/test_agent_tasks.py`. Cả bộ 237 test.
+
+**Giao việc bằng giọng nói ở tab Công việc (01/11/2026).** Người dùng muốn gọi "Mimi ơi" rồi nói việc như JARVIS, không gõ tay.
+- Web gửi `{"type":"work","on":bool,"project":name|null}` khi đổi tab và đổi ô **Dự án**. Đang `on`: mọi câu nói (kể cả không bật `bridge.auto_ask`, kể cả server không có bridge) đi qua `TaskManager.route`, không hỏi Claude của Mimi.
+- `route`: câu có dự án thì như cũ; không có thì làm ở dự án đang chọn, không chọn thì dự án của task gần nhất; chưa có gì thì đáp "Việc này làm ở dự án nào?" và giữ yêu cầu chờ (`PENDING_S = 90`). Câu kế tiếp là tên dự án thì giao yêu cầu đang chờ.
+- Tên mơ hồ giờ hỏi lại (message `command` tên `work`) thay vì tạo task lỗi; câu trả lời kế tiếp chọn dự án. Dự án không tồn tại vẫn thành task `failed`.
+- `match_work_query`: câu ngắn (≤ 7 từ) kiểu "tới đâu rồi", "xong chưa", "tiến độ" → đọc `status_text` của task gần nhất; "ngừng theo dõi" → huỷ theo dõi. Ở tab khác chỉ bắt khi đang có task chạy, để "tiến độ dự án là gì" vẫn hỏi Claude.
+- Web: thanh giọng nói đầu tab Công việc (orb nhỏ cùng trạng thái orb chính, nút Rảnh tay, câu bạn nói / câu Mimi đáp), form gõ tay thu vào "Gõ tay". Cả bộ 242 test.
+
+**STT nghe sai tên dự án (01/11/2026).** Thử thật lần đầu: "mở dự án job hay" ra "Mở dự án chấp 2." và "Mở dạng job page.". Whisper không biết tên thư mục nên đoán từ thông dụng gần âm.
+- Ở tab Công việc (`work` bật), `SttService.transcribe(..., names=)` thêm "Dự án: a, b, …." vào cuối prompt (sau glossary, vì Whisper giữ ~223 token cuối). `TaskManager.stt_names()`: 30 dự án dùng gần nhất, tên dạng đọc ("job-hay" → "job hay") + biệt danh, gần nhất đứng cuối. Turn log có thêm `names` (số tên trong prompt).
+- Chạy lại trên hai file audio đó: "Mở dự án job hay." và "Mở dạng job hay.".
+- "dự án" vẫn có thể nghe thành "dạng", nên ở tab Công việc `find_project_anywhere` tìm tên ở mọi vị trí trong câu, nhận khi điểm ≥ 0.85, tên ≥ 6 ký tự (để "đăng nhập" không khớp dự án `dang`) và chắc hơn ứng viên thứ hai. Phần trước tên chỉ là yêu cầu khi có động từ ("thêm phân trang cho job hay").
+- Chưa đo bằng số: chưa có bộ ghi âm câu có tên dự án. Muốn đo theo quy tắc thì ghi một bộ như `data/wake_testset` (câu giao việc có tên dự án thật) rồi so có/không có tên trong prompt. Cả bộ 244 test.
+
+**Thử thật lần 2 (01/11/2026): ba lỗi logic.**
+- Cắt tên: lượt dò tên nghe "Mimi ơi. Mở giảm.", lượt nhận dạng chính (prompt glossary + tên dự án) ra "Nhiên mê ơi, mở diễn.". `matcher.match` không nhận ra tên nên cả câu thành yêu cầu. Giờ `_wake_check` truyền kết quả dò tên vào `_question(named=)`, và `WakeMatcher.strip_name` bỏ tên: cắt sau dấu câu nằm ngay sau tên, không có thì bỏ cụm đầu câu giống tên nhất. Nếu câu bắt đầu bằng đúng từ đầu tiên sau tên của lượt dò tên thì lượt chính không viết tên, giữ nguyên câu.
+- Câu ảo giác: log có 20 câu Whisper bịa trên tiếng ồn ("Cảm ơn các bạn đã theo dõi và hẹn gặp lại." ×12, "Hãy subscribe cho kênh…" ×4). `server/stt/hallucination.py` bỏ các câu khớp mẫu trong `SttResult.text` (`raw` giữ nguyên). Lượt rảnh tay mà rỗng sau khi lọc thì không hỏi Claude, mở lại cửa sổ chờ câu hỏi.
+- "mở dạng karaoke" bị giao cho play-crew: ở tab Công việc, câu không khớp dự án nào rơi về dự án vừa làm. Giờ câu ngắn "mở X" (≤ 4 từ, không có động từ việc) mà X không khớp chắc thì `guess_open` trả ứng viên từ `ProjectRegistry.similar` (tính cả tên nằm trong tên dự án: "karaoke" → `guitar-karaoke`), Mimi hỏi lại hoặc báo không tìm thấy. Câu có động từ việc vẫn làm ở dự án đang chọn.
+- Cả bộ 259 test.
+
+**Sửa khi hiểu sai, ghi nhãn (01/11/2026, Phase 8 D bước 1).** Trước đây Mimi hỏi lại thì phải nói lại đúng tên dự án, giao nhầm thì không có cách sửa.
+- `Session.pending` giờ là `Pending` (yêu cầu, câu gốc, tên nghe được, ứng viên đã đọc, dự án giao nhầm, `turn_id`). `reply_kind` nhận câu trả lời ngắn: "ừ / đúng rồi / ok" chọn ứng viên đầu, "cái thứ hai / số 2" chọn theo thứ tự, "không phải" thì hỏi tên, "không, job hay cơ" lấy phần sau làm tên. Hỏi lại khi chỉ có một ứng viên: "có phải dự án X không?". "ừ" khi Mimi không hỏi gì thì không thành việc.
+- Nói "sai rồi" trong 2 phút sau khi giao việc: thôi theo dõi việc đó (Claude đã nhận yêu cầu thì nhắc dừng tay trong VS Code), hỏi lại với ứng viên còn lại. "không phải, X cơ" thì giao luôn sang X.
+- Web: command `work` có `choices` (tên ứng viên) thành nút ở tab Công việc và trong bong bóng hội thoại, kèm nút "Không phải". Thẻ việc có nút "Sai dự án": chọn dự án đúng, sửa yêu cầu, "Giao lại" (message `task_fix`).
+- Mỗi lần người dùng chỉ ra dự án đúng, `TaskManager.on_label` ghi một dòng vào `_local/logs/intents-YYYY-MM-DD.jsonl`: `heard`, `query`, `project`, `wrong`, `request`, `asked`, `answer`, `via` (`confirm` / `choose` / `name` / `deny_name` / `fix`), `turn_id` (trỏ về `turns-*.jsonl` có audio). Đây là kho nhãn cho các bước sau (biệt danh tự sinh, `intent_bench`).
+- Cả bộ 266 test.
+
+**Chưa thử thật.** Code mở VS Code, focus cửa sổ và gửi Enter mới kiểm bằng backend giả; phần Win32 mới chạy thử `list_windows`/`foreground`.
+- `SetForegroundWindow` từ tiến trình nền có thể bị Windows chặn. Code thử thêm `AttachThreadInput` và mẹo phím Alt; nếu vẫn hỏng thì chỉ báo lỗi.
+- Chưa biết sau khi URI mở tab Claude thì con trỏ có nằm ở ô nhập không; nếu không, Enter rơi vào editor.
+- `ready_wait_s = 3`, `submit_delay_s = 1.5` có thể ngắn với cửa sổ mới mở.
+- Prompt rất dài (> ~2K ký tự) có thể vượt giới hạn URL.
+
+**Để sau.**
+- A3: Mimi tự làm bằng Claude headless trong thư mục dự án, duyệt quyền qua web / giọng nói.
+- A4: điều khiển máy ngoài VS Code.
+
+## T-012: Tab Học bài: gửi tài liệu, Mimi giảng lại từng phần
+
+**Bối cảnh.** Người dùng muốn gửi tài liệu học (AWS, .NET, IELTS, TOEIC…) để Mimi hiểu rồi giảng lại chi tiết. Chốt với người dùng (04/11/2026): nhập bằng **dán text** hoặc **file .txt/.md/.docx** (không PDF, ảnh, URL); giảng **từng phần, dừng hỏi** (chia phần, giảng phần 1, hỏi "rõ chưa, sang phần tiếp nhé?", hỏi chen được, "tiếp" thì sang phần sau, cuối bài kiểm tra); **lưu thành thư viện** (mở lại học tiếp, mỗi tài liệu một session Claude riêng).
+
+**Cách làm.**
+- `server/study/library.py`: mỗi tài liệu một thư mục `_local/study/<YYYYMMDD-HHMMSS>/` gồm `doc.md`, `meta.json` (tên, nguồn, số ký tự, session, phần k/N, tên các phần đã giảng), `history.jsonl` (câu hỏi, câu trả lời, phần). `.docx` đọc bằng `zipfile` + ElementTree (tiêu đề → `#`, danh sách → `- `, bảng → `a | b`), không thêm package. Dòng dài hơn 1000 ký tự được ngắt ở khoảng trắng vì tool Read của Claude cắt dòng > 2000 ký tự. Giới hạn `max_chars = 200000`.
+- Claude chạy với `cwd` = thư mục tài liệu, lượt đầu được dặn đọc `doc.md` bằng tool Read (tools `Read, WebSearch, WebFetch`). Không nhét tài liệu vào dòng lệnh: Windows giới hạn ~32K ký tự. Đã thử headless: Read chạy được không cần duyệt quyền.
+- `prompts/study_reply.md`: instruction gia sư (chia 3–8 phần, mỗi lượt một phần 200–350 từ, hết phần tóm một câu rồi hỏi; "tiếp" / "giảng lại" / "kiểm tra mình"; hỏi chen thì chỉ trả lời, không tự sang phần mới; tài liệu tiếng Anh giảng bằng tiếng Việt). Lượt giảng bắt đầu bằng dòng `[Phần k/N: Tên phần]`; `MarkerFilter` cắt dòng này khỏi stream trước TTS (kể cả khi bị chia nhỏ qua nhiều delta) và lưu thành tiến độ. Ghi chú sau `---CODE---` là markdown, chỉ hiện.
+- `server/study/service.py`: `StudyService` giữ một `ClaudeCliBridge` cho mỗi tài liệu, session lưu vào `meta.json` khi lượt trả lời xong (giống bridge chính: lượt bị ngắt không thành ngữ cảnh). Model theo ô chọn model chung.
+- REST `/api/study` (`server/study/api.py`): danh sách, thêm (`{text}` hoặc `{filename, data_b64}`, file ≤ 10MB; không dùng multipart vì chưa cài `python-multipart`), xem (kèm text + lịch sử), đổi tên, học lại (`reset`: quên session, tiến độ, lịch sử), xoá.
+- Protocol: client gửi `{"type":"study","doc_id": id|null}` khi mở/đóng tài liệu hoặc rời tab; đang mở thì mọi câu hỏi (gõ, giữ Space, rảnh tay, kể cả khi tắt `auto_ask`) đi tới gia sư, lệnh giọng nói vẫn chạy như cũ. `answer_start` có `doc_id`; `study_doc` báo tiến độ. `hello.study` = null khi bridge không phải `claude_cli`.
+- Web: tab **Học bài**: thư viện (thêm tài liệu, thẻ có tiến độ, đổi tên, xoá) và màn học (orb nhỏ, thanh tiến độ, "Xem tài liệu", hội thoại riêng tải lại từ lịch sử, nút nhanh "Tiếp phần sau / Giảng lại dễ hơn / Cho ví dụ / Kiểm tra mình / Tóm tắt", "Học lại từ đầu"). Tài liệu mới lưu xong thì tự hỏi "Bắt đầu nhé". Trên điện thoại (≤ 480px) link Đề xuất ở header bị ẩn cho đủ chỗ bốn tab.
+- Test: `tests/test_study.py` (gia sư giả, không gọi Claude). Cả bộ 280 test.
+
+**Thử thật (04/11/2026)** qua `/ws` với tài liệu SQS 709 ký tự, model mặc định: lượt đầu text đầu 14.6s (gồm đọc file), xong 17.4s, chia 4 phần, dòng tiến độ cắt đúng, có ghi chú markdown; câu hỏi chen "visibility timeout khác gì delay queue" trả lời sau 3.6s, nói rõ phần nào là bổ sung ngoài tài liệu, không tự sang phần 2. Giao diện xem bằng Chrome headless ở 900px và 390px.
+
+**Chưa làm / để sau.**
+- Chưa dùng thật một buổi học trên trình duyệt (rảnh tay, đọc dài nhiều phần).
+- Xoá tài liệu không xoá log phiên của Claude trong `~/.claude/projects/` (thư mục slug của `_local/study/<id>`).
+- Tài liệu rất dài (gần 200K ký tự) chưa thử: lượt đầu đọc nhiều lần bằng offset, tốn ngữ cảnh.
