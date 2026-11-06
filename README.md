@@ -139,6 +139,7 @@ Câu trả lời hiện dưới lượt nói; phần code (sau `---CODE---`) ch�
   - `kind = "none"`: chỉ STT + TTS như Phase 3.
   - `auto_ask = false`: nói xong không tự hỏi, sửa transcript rồi mới bấm **Hỏi Claude**.
 - Mỗi lượt hỏi được ghi vào `_local/sessions/YYYY-MM-DD.jsonl` (câu hỏi, trả lời, độ trễ, chi phí CLI báo).
+- Message `generate` (cho client ngoài, hiện là game TikTok Live World): một lượt `claude -p` độc lập, trả text qua `generate_result`. Không đọc thành tiếng, không dùng session và model của Mimi, không có tool, tắt thinking (haiku bật thinking mất 16–34 s một lượt, tắt còn 2–6 s). Chỉ chạy khi `kind = "claude_cli"`, model phải nằm trong `models`; tối đa 2 lượt cùng lúc, lượt sau xếp hàng. Giới hạn thời gian là `generate_timeout_s` (mặc định 60).
 
 Đo độ trễ (server đang chạy, `kind = "claude_cli"`, mỗi lần chạy tốn hạn mức như hỏi thật 5 câu):
 

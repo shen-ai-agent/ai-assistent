@@ -12,6 +12,10 @@ Client → Server
   {"type": "ask_stop"}                          dừng hỏi và dừng đọc câu trả lời
   {"type": "new_session"}                       Claude quên ngữ cảnh cũ
   {"type": "set_model", "model": "sonnet"}      đổi model cho các lượt sau ("" = mặc định), áp cho mọi tab
+  {"type": "generate", "req_id": "<chuỗi>", "system": "<prompt>", "text": "<nội dung>", "model": "haiku"}
+        lượt claude -p độc lập cho client ngoài (game TikTok Live World): không đọc thành tiếng, không --resume,
+        không tool, không đổi session/model của Mimi. model phải nằm trong [bridge] models. Tối đa 2 lượt chạy
+        cùng lúc (mọi tab), lượt sau xếp hàng. Trả generate_result; đóng kết nối thì lượt đang chạy bị huỷ
   {"type": "listen", "on": bool, "topic": "AWS" | null}   bật/tắt rảnh tay (gửi lại để đổi chủ đề).
                                                 Khi bật, client gửi frame PCM liên tục; giữ Space vẫn dùng được
   Giao việc cho VS Code (T-011, chỉ khi hello.agent khác null):
@@ -54,6 +58,9 @@ Server → Client
    "first_text_ms", "total_ms", "cost_usd", "model"}            model: tên model thật đã trả lời
   {"type": "bridge_session", "session_id": str | null}           sau new_session
   {"type": "bridge_model", "model": str}                         sau set_model, gửi tới mọi tab
+  {"type": "generate_result", "req_id", "text": str | null, "error": str | null, "ms"}
+        trả lời generate, chỉ gửi cho tab đã hỏi. Đúng một trong text/error khác null. Bridge không phải
+        claude_cli hoặc model không cho phép cũng trả error ở đây (có req_id để client bỏ chờ ngay)
   {"type": "study_doc", "doc": {"id", "title", "source", "chars", "created", "updated", "started", "part", "total",
    "parts": {"k": "tên phần"}}}                                 tiến độ tài liệu đổi (đầu lượt giảng, cuối lượt)
   {"type": "command", "name": "new_session" | "stop" | "repeat", "text", "reply": str | null}
@@ -195,6 +202,10 @@ def bridge_session(session_id: str | None) -> dict:
 
 def bridge_model(model: str) -> dict:
     return {"type": "bridge_model", "model": model}
+
+
+def generate_result(req_id: str, text: str | None, error: str | None, ms: int) -> dict:
+    return {"type": "generate_result", "req_id": req_id, "text": text, "error": error, "ms": ms}
 
 
 def study_doc(doc: dict) -> dict:

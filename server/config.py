@@ -48,6 +48,7 @@ class Config:
     bridge_model: str = ""  # rỗng = model mặc định của Claude Code
     bridge_models: list[str] = field(default_factory=lambda: ["sonnet", "opus", "haiku"])  # lựa chọn trên web
     bridge_timeout_s: float = 120
+    bridge_generate_timeout_s: float = 60  # message generate (client ngoài, không đọc)
     bridge_log_dir: Path = ROOT / "_local" / "sessions"
     # Trợ lý rảnh tay (T-010): mic luôn mở, gọi tên mới nghe câu hỏi
     assistant_name: str = "Mimi"

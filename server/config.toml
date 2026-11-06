@@ -41,6 +41,7 @@ tools = ["WebSearch", "WebFetch"]
 model = ""                # rỗng = mặc định của Claude Code; đổi được trên web (mất khi restart server)
 models = ["sonnet", "opus", "haiku"]   # alias của claude --model, hiện trong ô chọn trên web
 timeout_s = 120
+generate_timeout_s = 60    # message generate: lượt claude -p độc lập cho game TikTok Live World
 log_dir = "_local/sessions"
 
 [assistant]

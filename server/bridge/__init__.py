@@ -14,7 +14,7 @@ def make_bridge(cfg) -> Bridge | None:
     if cfg.bridge_kind == "claude_cli":
         from .claude_cli import ClaudeCliBridge
         return ClaudeCliBridge(cfg.bridge_workdir, cfg.bridge_prompt, cfg.bridge_tools, cfg.bridge_model,
-                               cfg.bridge_timeout_s)
+                               cfg.bridge_timeout_s, generate_timeout_s=cfg.bridge_generate_timeout_s)
     if cfg.bridge_kind == "clipboard":
         from .clipboard import ClipboardBridge
         return ClipboardBridge(cfg.bridge_hotkey)

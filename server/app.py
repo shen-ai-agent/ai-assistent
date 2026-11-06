@@ -221,6 +221,7 @@ class Session:
         self.last_heard: tuple[str, str] | None = None   # (turn_id, text) của lượt nhận dạng gần nhất
         self.study: StudyService | None = app.state.study
         self.study_doc: str | None = None  # tài liệu đang mở ở tab Học (message study): câu hỏi đi tới gia sư
+        self.generate_tasks: set[asyncio.Task] = set()  # lượt generate đang chạy, huỷ khi đóng kết nối
 
     async def run(self):
         tts = {"sample_rate": self.tts.sample_rate, "voice": self.cfg.tts_voice} if self.tts else None
@@ -255,6 +256,8 @@ class Session:
                 self.hf.close()
             self.stop_asking()
             self.stop_speaking()
+            for t in self.generate_tasks:
+                t.cancel()  # bridge kill tiến trình claude
 
     async def on_audio(self, data: bytes):
         if self.state is not State.LISTENING:
@@ -350,12 +353,41 @@ class Session:
             else:
                 self.hf = HandsFree(self, self.app.state.vad_session, topic)
                 await self.send(P.listen(self.hf.mode))
+        elif kind == "generate":
+            await self.on_generate(msg)
         elif kind == "study":
             await self.on_study(msg.get("doc_id"))
         elif kind in ("projects", "task", "task_cancel", "task_open", "task_fix", "work"):
             await self.on_task_message(kind, msg)
         else:
             await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Không biết message {kind!r}"))
+
+    async def on_generate(self, msg: dict):
+        """Message generate: lượt claude -p độc lập, chạy nền để vòng nhận message không bị chặn."""
+        req_id, system, text, model = (msg.get(k) for k in ("req_id", "system", "text", "model"))
+        if not isinstance(req_id, str) or not req_id:
+            return await self.send(P.error(ErrorCode.BAD_MESSAGE, "generate cần req_id"))
+        if not isinstance(system, str) or not isinstance(text, str) or not text.strip() or not isinstance(model, str):
+            return await self.send(P.generate_result(req_id, None, "generate cần system, text và model", 0))
+        if self.bridge is None or not hasattr(self.bridge, "generate"):
+            return await self.send(P.generate_result(req_id, None, 'generate cần [bridge] kind = "claude_cli"', 0))
+        if model not in self.cfg.bridge_models:
+            return await self.send(P.generate_result(req_id, None, f"Model {model!r} không có trong [bridge] models", 0))
+
+        async def run():
+            t0 = time.perf_counter()
+            out, err = None, None
+            try:
+                out = await self.bridge.generate(system, text, model)
+            except (BridgeError, OSError) as e:  # OSError: không chạy được tiến trình claude
+                err = str(e)
+            ms = round((time.perf_counter() - t0) * 1000)
+            log.info("generate %s (%s): %d ms%s", req_id, model, ms, f", lỗi: {err}" if err else "")
+            await self.send(P.generate_result(req_id, out, err, ms))
+
+        task = asyncio.create_task(run())
+        self.generate_tasks.add(task)
+        task.add_done_callback(self.generate_tasks.discard)
 
     async def on_task_message(self, kind: str, msg: dict):
         if self.agent is None:

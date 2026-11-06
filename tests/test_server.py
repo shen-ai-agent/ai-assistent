@@ -432,6 +432,98 @@ def test_set_model_applies_to_all_tabs(tmp_path):
     assert bridge.model == "haiku"
 
 
+class FakeGenBridge(FakeBridge):
+    """FakeBridge có generate (như claude_cli). gate: generate chờ gate trước khi trả lời."""
+
+    def __init__(self, gate: threading.Event | None = None):
+        super().__init__(["Được."])
+        self.model = ""
+        self.gate = gate
+        self.generated: list[tuple[str, str, str]] = []
+        self.gen_cancelled = threading.Event()
+
+    async def generate(self, system, text, model):
+        self.generated.append((system, text, model))
+        try:
+            if self.gate is not None:
+                while not self.gate.is_set():
+                    await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            self.gen_cancelled.set()
+            raise
+        if text == "lỗi":
+            raise BridgeError("Hết hạn mức")
+        return f'[{{"text": "{text}"}}]'
+
+
+def test_generate_returns_result_without_touching_mimi(tmp_path):
+    bridge, tts = FakeGenBridge(), FakeTts()
+    bridge.session_id, bridge.model = "s-mimi", "sonnet"
+    with bridge_client(tmp_path, bridge, tts) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "generate", "req_id": "r1", "system": "Viết JSON.", "text": "mèo", "model": "haiku"})
+            msgs = collect_until(ws, "generate_result")
+            res = msgs[-1]
+            assert res["req_id"] == "r1" and res["text"] == '[{"text": "mèo"}]' and res["error"] is None
+            assert isinstance(res["ms"], int)
+            # Không đọc thành tiếng, không tạo lượt hỏi
+            assert not {m["type"] for m in msgs} & {"speak_start", "answer_start", "bridge_model", "bridge_session"}
+    assert bridge.generated == [("Viết JSON.", "mèo", "haiku")]
+    assert bridge.questions == [] and bridge.session_id == "s-mimi" and bridge.model == "sonnet"
+
+
+def test_generate_errors(tmp_path, setup):
+    bridge = FakeGenBridge()
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "generate", "system": "s", "text": "mèo", "model": "haiku"})
+            assert recv_until(ws, "error")["code"] == "bad_message"
+            ws.send_json({"type": "generate", "req_id": "r1", "system": "s", "text": " ", "model": "haiku"})
+            assert recv_until(ws, "generate_result")["error"] == "generate cần system, text và model"
+            ws.send_json({"type": "generate", "req_id": "r2", "system": "s", "text": "mèo", "model": "gpt"})
+            res = recv_until(ws, "generate_result")
+            assert res["req_id"] == "r2" and res["text"] is None and "gpt" in res["error"]
+            ws.send_json({"type": "generate", "req_id": "r3", "system": "s", "text": "lỗi", "model": "haiku"})
+            res = recv_until(ws, "generate_result")
+            assert res["req_id"] == "r3" and res["text"] is None and res["error"] == "Hết hạn mức"
+    # Bridge không có generate (clipboard, FakeBridge) và bridge tắt: trả lỗi kèm req_id
+    with bridge_client(tmp_path, FakeBridge(["Được."])) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "generate", "req_id": "r4", "system": "s", "text": "mèo", "model": "haiku"})
+            assert "claude_cli" in recv_until(ws, "generate_result")["error"]
+    client, _, _ = setup
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "generate", "req_id": "r5", "system": "s", "text": "mèo", "model": "haiku"})
+        assert "claude_cli" in recv_until(ws, "generate_result")["error"]
+
+
+def test_generate_does_not_block_and_answers_only_sender(tmp_path):
+    gate = threading.Event()
+    bridge = FakeGenBridge(gate)
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as a, client.websocket_connect("/ws") as b:
+            recv_until(b, "state")
+            a.send_json({"type": "generate", "req_id": "r1", "system": "s", "text": "mèo", "model": "haiku"})
+            # Vòng nhận message không bị chặn khi generate đang chờ
+            a.send_json({"type": "new_session"})
+            assert recv_until(a, "bridge_session")["session_id"] is None
+            gate.set()
+            assert recv_until(a, "generate_result")["text"] == '[{"text": "mèo"}]'
+            b.send_json({"type": "new_session"})
+            msgs = collect_until(b, "bridge_session")
+            assert "generate_result" not in {m["type"] for m in msgs}
+
+
+def test_generate_cancelled_on_disconnect(tmp_path):
+    bridge = FakeGenBridge(threading.Event())  # gate không bao giờ mở
+    with bridge_client(tmp_path, bridge) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "generate", "req_id": "r1", "system": "s", "text": "mèo", "model": "haiku"})
+            ws.send_json({"type": "new_session"})
+            recv_until(ws, "bridge_session")  # generate đã bắt đầu
+        assert bridge.gen_cancelled.wait(5)
+
+
 def test_silence_skipped_by_vad(tmp_path):
     engine = FakeEngine()
     cfg = Config(log_dir=tmp_path / "logs", save_audio=False, min_speech_ms=200)

@@ -171,6 +171,101 @@ def test_cli_bridge_timeout(fake_bridge):
         asyncio.run(collect(fake_bridge, "slow"))
 
 
+FAKE_GENERATE = textwrap.dedent('''
+    import json, os, sys, time
+    args = sys.argv[1:]
+    text = sys.stdin.buffer.read().decode("utf-8")
+    def result(r, is_error=False):
+        print(json.dumps({"type": "result", "subtype": "success", "is_error": is_error, "result": r}), flush=True)
+    if text == "crash":
+        print("Error: not logged in", file=sys.stderr)
+        sys.exit(1)
+    if text == "error":
+        result("Credit balance is too low", is_error=True)
+        sys.exit(1)
+    if text == "slow":
+        time.sleep(30)
+    if text.startswith("overlap:"):
+        # Ghi mốc bắt đầu/kết thúc để test đếm số lượt chạy cùng lúc
+        log = text.split(":", 1)[1]
+        with open(log, "a") as f:
+            f.write(f"{time.time()} 1\\n")
+        time.sleep(0.6)
+        with open(log, "a") as f:
+            f.write(f"{time.time()} -1\\n")
+    result(json.dumps({"text": text, "system": args[args.index("--system-prompt") + 1],
+                       "model": args[args.index("--model") + 1], "tools": args[args.index("--tools") + 1],
+                       "resume": "--resume" in args}, ensure_ascii=False))
+''')
+
+
+@pytest.fixture
+def gen_bridge(tmp_path, fake_bridge):
+    script = tmp_path / "fake_generate.py"
+    script.write_text(FAKE_GENERATE, encoding="utf-8")
+    real = ClaudeCliBridge.generate_command
+    fake_bridge.generate_command = lambda system, model: [sys.executable, str(script),
+                                                          *real(fake_bridge, system, model)[1:]]
+    return fake_bridge
+
+
+def test_generate_is_stateless(gen_bridge):
+    asyncio.run(collect(gen_bridge, "S3 là gì?"))  # Mimi đang có session
+    gen_bridge.model = "sonnet"
+    out = json.loads(asyncio.run(gen_bridge.generate("Viết JSON.", "Kể chuyện về mèo 🐱", "haiku")))
+    assert out == {"text": "Kể chuyện về mèo 🐱", "system": "Viết JSON.", "model": "haiku", "tools": "",
+                   "resume": False}
+    # Không đụng session và model của Mimi
+    assert gen_bridge.session_id == "new-session" and gen_bridge.model == "sonnet"
+    cmd = gen_bridge.generate_command("x", "haiku")
+    assert "--no-session-persistence" in cmd and "--append-system-prompt" not in cmd
+    settings = json.loads(cmd[cmd.index("--settings") + 1])
+    assert settings["alwaysThinkingEnabled"] is False and settings["claudeMdExcludes"] == ["**/CLAUDE.md"]
+
+
+def test_generate_long_text_via_stdin(gen_bridge):
+    long = "Câu chuyện dài. " * 4000  # ~64K ký tự, vượt giới hạn dòng lệnh Windows
+    assert json.loads(asyncio.run(gen_bridge.generate("s", long, "haiku")))["text"] == long
+
+
+def test_generate_errors(gen_bridge):
+    with pytest.raises(BridgeError, match="not logged in"):
+        asyncio.run(gen_bridge.generate("s", "crash", "haiku"))
+    with pytest.raises(BridgeError, match="Credit"):
+        asyncio.run(gen_bridge.generate("s", "error", "haiku"))
+    gen_bridge.generate_timeout_s = 1
+    with pytest.raises(BridgeError, match="không trả lời xong"):
+        asyncio.run(gen_bridge.generate("s", "slow", "haiku"))
+
+
+def test_generate_cancel_kills_process(gen_bridge):
+    async def run():
+        t0 = time.perf_counter()
+        task = asyncio.create_task(gen_bridge.generate("s", "slow", "haiku"))
+        await asyncio.sleep(0.5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return time.perf_counter() - t0
+
+    assert asyncio.run(run()) < 10
+
+
+def test_generate_runs_at_most_two_at_once(gen_bridge, tmp_path):
+    log = tmp_path / "overlap.log"
+
+    async def run():
+        await asyncio.gather(*(gen_bridge.generate("s", f"overlap:{log}", "haiku") for _ in range(4)))
+
+    asyncio.run(run())
+    events = sorted((float(t), int(d)) for t, d in (line.split() for line in log.read_text().splitlines()))
+    running = peak = 0
+    for _, d in events:
+        running += d
+        peak = max(peak, running)
+    assert peak == 2
+
+
 def test_parse_hotkey():
     assert parse_hotkey("ctrl+alt+r") == (0x2 | 0x1 | 0x4000, ord("R"))
     assert parse_hotkey("Ctrl+Shift+F9")[1] == 0x78
