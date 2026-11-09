@@ -109,6 +109,9 @@ function refreshTalkButton() {
   ui.studyInput.disabled = ui.ask.disabled || !study.doc;
   ui.studyStop.disabled = ui.speakStop.disabled;
   for (const b of ui.studyQuick.querySelectorAll("button")) b.disabled = ui.studyInput.disabled;
+  // Nghe lại chỉ cần TTS; đang chờ gia sư trả lời thì khoá để không đè lên câu đang giảng
+  const noReplay = ui.speak.disabled || bridge.asking;
+  for (const b of ui.studyDoc.querySelectorAll(".replay, .replay-last")) b.disabled = noReplay;
   ui.studyAdd.disabled = !study.info;
   renderOrb();
   syncWakeLock();
@@ -507,6 +510,7 @@ function makeChat(box, notesMd = false, max = CHAT_MAX) {
     if (box.scrollHeight - box.scrollTop - box.clientHeight < 40) c.follow = true;
   });
   box.addEventListener("click", copyCode);
+  box.addEventListener("click", onReplayClick);
   return c;
 }
 
@@ -567,8 +571,37 @@ function chatReply(text, code = "", fresh = false, speakId = null) {
     li.notesSrc = code;
     notes.innerHTML = renderMarkdown(code); // renderMarkdown escape HTML trước
   }
+  li.querySelector(".replay").hidden = !chat.notesMd || !li.raw.trim(); // Nghe lại: chỉ ở tab Học bài
   revealReply(li);
   workSay(null, li.raw);
+}
+
+// Đọc lại phần lời của một bong bóng Mimi (không gồm ghi chú sau ---CODE---), tô câu như lúc đọc lần đầu.
+// Bong bóng gắn với lượt đọc khi speak_start về (onSpeakStart), vì speak_id do server cấp.
+function replayReply(li) {
+  if (!li?.raw?.trim() || ui.speak.disabled || bridge.asking) return;
+  stopPlayback();
+  ensurePlayer();
+  player.clickedAt = performance.now();
+  player.active = true;
+  player.replayNext = li;
+  const c = chatOf(li);
+  if (c) c.follow = true;
+  send({ type: "speak", text: li.raw });
+  refreshTalkButton();
+}
+
+function onReplayClick(e) {
+  const btn = e.target.closest(".replay");
+  if (btn) replayReply(btn.closest(".msg"));
+}
+
+const chatOf = (li) => Object.values(chats).find((c) => c.box === li.parentElement) ?? null;
+
+// Bong bóng đang đọc lượt speakId: câu trả lời đang viết của một khung chat, hoặc bong bóng vừa bấm Nghe lại
+function speakingReply(speakId) {
+  const lis = [player.replay, ...Object.values(chats).map((c) => c.reply)];
+  return lis.find((li) => li && li.speakId === speakId && li.isConnected) ?? null;
 }
 
 // Tab Công việc: hiện lượt nói gần nhất (câu bạn vừa nói và câu Mimi đáp) ngay dưới orb nhỏ
@@ -621,8 +654,9 @@ function revealReply(li) {
 
 // Tô câu thứ i của bong bóng đang đọc (-1: bỏ tô), cuộn tới câu đó nếu nó ra ngoài khung nhìn
 function highlightReply(speakId, i) {
-  const li = chat.reply;
-  if (!li || li.speakId !== speakId) return;
+  const li = speakingReply(speakId);
+  const c = li && chatOf(li);
+  if (!c) return;
   li.now = i;
   let cur = null;
   for (const s of li.querySelectorAll(".sent")) {
@@ -630,8 +664,8 @@ function highlightReply(speakId, i) {
     s.classList.toggle("now", on);
     if (on) cur = s;
   }
-  if (!cur || !chat.follow) return;
-  const el = chat.box;
+  if (!cur || !c.follow) return;
+  const el = c.box;
   const box = el.getBoundingClientRect();
   const r = cur.getBoundingClientRect();
   if (r.top < box.top + 8 || r.bottom > box.bottom - 8) {
@@ -724,8 +758,9 @@ ui.mimiStop.onclick = () => stopSpeaking();
 // id: speak_id đang phát; frame của lượt cũ (đến muộn sau khi dừng) bị bỏ.
 // nextTime: thời điểm (theo ctx.currentTime) mẩu kế tiếp bắt đầu. Đo: tiếng đầu tính từ lúc bấm Đọc;
 // maxGapS = lần hết audio lâu nhất trong lúc chờ mẩu sau (DoD: khoảng lặng giữa câu ≤ 0.5s).
+// replayNext: bong bóng vừa bấm Nghe lại, chờ speak_start; replay: bong bóng đang được đọc lại.
 const player = { tts: null, ctx: null, analyser: null, id: -1, active: false, ended: false, sources: new Set(), nextTime: 0,
-  pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, items: [] };
+  pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, items: [], replayNext: null, replay: null };
 
 function ensurePlayer() {
   if (!player.tts) return;
@@ -781,6 +816,9 @@ function onSpeakStart(msg) {
   player.firstAudioMs = null;
   player.maxGapS = 0;
   player.items = [];
+  player.replay = player.replayNext; // lượt đọc khác (câu trả lời mới, thông báo) thì bỏ gắn bong bóng cũ
+  player.replayNext = null;
+  if (player.replay) Object.assign(player.replay, { speakId: msg.speak_id, sents: [], now: -1 });
   ui.speakSentences.replaceChildren();
   refreshTalkButton();
 }
@@ -800,8 +838,8 @@ function onSpeakMore(msg) {
     ui.speakSentences.append(li);
     player.items.push(li);
   }
-  const reply = chat.reply;
-  if (reply?.speakId === msg.speak_id) {
+  const reply = speakingReply(msg.speak_id);
+  if (reply) {
     reply.sents.push(...msg.sentences.map((s) => s.source));
     renderReplyText(reply);
   }
@@ -1731,6 +1769,15 @@ function renderStudyDoc() {
     b.onclick = () => askNow(text);
     return b;
   }));
+  if (started) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "replay-last";
+    b.textContent = "↻ Nghe lại";
+    b.title = "Đọc lại câu trả lời gần nhất";
+    b.onclick = () => replayReply([...ui.studyChat.querySelectorAll(".msg.mimi")].pop());
+    ui.studyQuick.prepend(b);
+  }
   refreshTalkButton();
 }
 

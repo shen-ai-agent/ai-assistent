@@ -447,6 +447,11 @@ button.link.danger { color: var(--bad); }
 .study-doc .chat:empty::before { content: "Bấm Bắt đầu học để nghe giảng phần 1."; margin: auto; color: var(--muted); font-size: 14px; }
 .msg .notes { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
   background: #10131a; font-size: 14px; line-height: 1.55; white-space: normal; }
+.msg .replay { display: block; margin: 8px 0 0 auto; padding: 2px 10px; font-size: 12.5px; border-radius: 999px;
+  background: transparent; color: var(--muted); border: 1px solid #333a46; }
+.msg .replay[hidden] { display: none; }
+.msg .replay:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.msg .replay:disabled { opacity: .4; }
 .study-quick { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 8px; }
 .study-quick button { padding: 5px 13px; font-size: 13.5px; border-radius: 999px; background: rgba(23, 26, 34, .85);
   color: #c7cede; border: 1px solid #333a46; }
