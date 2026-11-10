@@ -23,6 +23,24 @@ def port_in_use(host: str, port: int) -> bool:
         return s.connect_ex((host, port)) == 0
 
 
+_PRIORITY = {"normal": 0x20, "above_normal": 0x8000, "high": 0x80}  # *_PRIORITY_CLASS của Win32
+
+
+def set_priority(name: str) -> None:
+    """Nâng priority cả tiến trình (mọi luồng), để TTS không bị app khác chen khi CPU bận."""
+    if sys.platform != "win32" or name not in _PRIORITY:
+        if name not in _PRIORITY:
+            logging.warning("priority không hợp lệ: %r (chọn %s)", name, ", ".join(_PRIORITY))
+        return
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.GetCurrentProcess.restype = ctypes.c_void_p
+    if k32.SetPriorityClass(ctypes.c_void_p(k32.GetCurrentProcess()), _PRIORITY[name]):
+        logging.info("Priority tiến trình: %s", name)
+    else:
+        logging.warning("Không đặt được priority %s (lỗi Win32 %d)", name, k32.GetLastError())
+
+
 def main():
     ap = argparse.ArgumentParser(description="Voice Study Assistant server")
     ap.add_argument("--config", type=Path, default=DEFAULT_PATH)
@@ -46,6 +64,7 @@ def main():
             return
         sys.exit(f"Cổng {cfg.port} đang bận: server đã chạy rồi? (tắt theo hướng dẫn trong README)")
 
+    set_priority(cfg.priority)
     app = create_app(cfg)
     configs = [uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="info")]
     if cfg.lan_port:

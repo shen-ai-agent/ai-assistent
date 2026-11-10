@@ -7,6 +7,11 @@ const BACKOFF_MS = [1000, 2000, 5000];
 const AUDIO_OPTS = ["echoCancellation", "noiseSuppression", "autoGainControl"];
 const SENTENCE_GAP_S = 0.15;          // khoảng lặng giữa hai câu, giống tts_bench
 const PLAY_LEAD_S = 0.05;             // lùi lịch phát mẩu đầu một chút để mẩu sau kịp tới
+// Máy bận thì TTS có lúc chậm hơn tiếng phát: hụt giữa câu thì đệm thêm (0.4 → 0.8 → 1.6s) trước khi phát tiếp,
+// một lần ngừng ngắn thay cho giật liên tục. Đệm giữ sang lượt đọc sau, giảm một nửa mỗi lượt.
+const REBUFFER_S = 0.4;
+const MAX_LEAD_S = 1.6;
+const ORB_HOLD_S = 1.0;               // hết tiếng chưa quá chừng này thì orb vẫn "đang nói", không nhấp nháy
 const CODE_MARKER = "---CODE---";     // khớp server/tts/normalize.py: phần sau chỉ hiện, không đọc
 
 const $ = (id) => document.getElementById(id);
@@ -695,7 +700,7 @@ function orbState() {
   if (ws?.readyState !== WebSocket.OPEN || !mic.ready) return "off";
   if (state === "ERROR") return "error";
   if (state === "LISTENING") return "listening";
-  if (player.active && player.sources.size) return "speaking";
+  if (player.active && (player.sources.size || player.ctx?.currentTime - player.nextTime < ORB_HOLD_S)) return "speaking";
   if (state === "TRANSCRIBING" || state === "WAITING_CLAUDE" || bridge.asking || player.active) return "thinking";
   if (hf.mode === "ACTIVE") return "listening";
   if (hf.mode !== "OFF") return "sleep";
@@ -757,10 +762,12 @@ ui.mimiStop.onclick = () => stopSpeaking();
 
 // id: speak_id đang phát; frame của lượt cũ (đến muộn sau khi dừng) bị bỏ.
 // nextTime: thời điểm (theo ctx.currentTime) mẩu kế tiếp bắt đầu. Đo: tiếng đầu tính từ lúc bấm Đọc;
-// maxGapS = lần hết audio lâu nhất trong lúc chờ mẩu sau (DoD: khoảng lặng giữa câu ≤ 0.5s).
+// maxGapS = lần hết audio lâu nhất trong lúc chờ mẩu sau (DoD: khoảng lặng giữa câu ≤ 0.5s), underruns = số lần hụt
+// giữa câu. lead = đệm hiện tại (REBUFFER_S).
 // replayNext: bong bóng vừa bấm Nghe lại, chờ speak_start; replay: bong bóng đang được đọc lại.
 const player = { tts: null, ctx: null, analyser: null, id: -1, active: false, ended: false, sources: new Set(), nextTime: 0,
-  pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, items: [], replayNext: null, replay: null };
+  pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, underruns: 0, lead: PLAY_LEAD_S, items: [],
+  replayNext: null, replay: null };
 
 function ensurePlayer() {
   if (!player.tts) return;
@@ -815,6 +822,8 @@ function onSpeakStart(msg) {
   player.pendingGap = 0;
   player.firstAudioMs = null;
   player.maxGapS = 0;
+  player.underruns = 0;
+  player.lead = Math.max(PLAY_LEAD_S, player.lead / 2);
   player.items = [];
   player.replay = player.replayNext; // lượt đọc khác (câu trả lời mới, thông báo) thì bỏ gắn bong bóng cũ
   player.replayNext = null;
@@ -869,8 +878,8 @@ function onAudio(buf) {
   const now = player.ctx.currentTime;
   let start;
   if (player.firstAudioMs === null) {
-    start = now + PLAY_LEAD_S;
-    player.firstAudioMs = performance.now() - player.clickedAt + PLAY_LEAD_S * 1000;
+    start = now + player.lead;
+    player.firstAudioMs = performance.now() - player.clickedAt + player.lead * 1000;
     if (hf.ackSpeakId === id && hf.ackLi) {
       hf.ackLi.append(` · ngừng nói → nghe câu đáp ${Math.round(player.firstAudioMs)}ms`);
       hf.ackLi = null;
@@ -881,8 +890,15 @@ function onAudio(buf) {
     }
   } else {
     const due = player.nextTime + player.pendingGap;
-    if (due < now) player.maxGapS = Math.max(player.maxGapS, now - player.nextTime); // hụt: im lâu hơn dự kiến
-    start = Math.max(due, now);
+    start = due;
+    if (due < now) { // hụt: hết audio trước khi mẩu này tới
+      if (!player.pendingGap) { // giữa câu: TTS đang chậm hơn tiếng phát, đệm nhiều hơn
+        player.underruns++;
+        player.lead = Math.min(MAX_LEAD_S, Math.max(REBUFFER_S, player.lead * 2));
+      }
+      start = now + player.lead;
+      player.maxGapS = Math.max(player.maxGapS, start - player.nextTime);
+    }
   }
   player.pendingGap = 0;
 
@@ -907,6 +923,7 @@ function onSpeakEnd(msg) {
     `server TTFA ${msg.ttfa_ms ?? "–"}ms`,
     `audio ${(msg.audio_ms / 1000).toFixed(1)}s / tổng hợp ${(msg.synth_ms / 1000).toFixed(1)}s`,
     `hụt dài nhất ${Math.round(player.maxGapS * 1000)}ms`,
+    player.underruns && `hụt giữa câu ${player.underruns} lần (đệm ${Math.round(player.lead * 1000)}ms)`,
   ];
   ui.speakStatus.textContent = parts.filter(Boolean).join(" · ");
   if (!player.sources.size) finishPlayback();

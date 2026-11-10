@@ -48,7 +48,8 @@ def _whisper_engine(cfg: Config):
 def _zerotts_engine(cfg: Config):
     from .tts.synth import ZeroTtsEngine  # import muộn: test không cần model
     return ZeroTtsEngine(cfg.tts_voice, cfg.tts_device, cfg.tts_threads,
-                         first_chunk_frames=cfg.tts_first_chunk_frames, max_chunk_frames=cfg.tts_max_chunk_frames)
+                         first_chunk_frames=cfg.tts_first_chunk_frames, max_chunk_frames=cfg.tts_max_chunk_frames,
+                         cuda_graph=cfg.tts_cuda_graph)
 
 
 def _silero_session():
@@ -111,6 +112,7 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
             tts = TtsService(await asyncio.to_thread(tts_factory, cfg), loanwords=cfg.tts_loanwords)
             # Warm-up: lần chạy đầu của onnxruntime CUDA chậm (cấp phát, chọn kernel)
             await asyncio.to_thread(lambda: [c for seg in tts.plan("Xin chào bạn.") for c in tts.stream(seg)])
+            log.info("TTS sẵn sàng (CUDA Graph: %s)", "bật" if getattr(tts.engine, "cuda_graph", False) else "tắt")
             app.state.tts = tts
         app.state.sessions = []  # kết nối đang mở, mới nhất ở cuối
         app.state.vad_session = await asyncio.to_thread(vad_factory)  # ONNX CPU, các phiên dùng chung

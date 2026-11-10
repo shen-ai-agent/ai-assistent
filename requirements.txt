@@ -8,6 +8,8 @@ faster-whisper==1.2.1
 # faster-whisper kéo theo onnxruntime bản CPU, hai gói ghi đè nhau: xem bước cài trong README.
 zerotts==0.1.5
 onnxruntime-gpu==1.23.2
+# Sửa graph local_frame_decode của ZeroTTS một lần để chạy CUDA Graph (server/tts/zerotts_gpu.py)
+onnx==1.17.0
 # Voice server
 fastapi==0.143.2
 uvicorn[standard]==0.54.0

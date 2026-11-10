@@ -18,6 +18,9 @@ class Config:
     lan_port: int = 0
     lan_cert: Path = ROOT / "_local" / "certs" / "lan.crt"
     lan_key: Path = ROOT / "_local" / "certs" / "lan.key"
+    # Priority tiến trình trên Windows: normal / above_normal / high. TTS phải gửi kernel GPU đều đặn mỗi 80ms;
+    # máy chạy nhiều app thì luồng TTS bị chen nên giọng giật (đo: high giảm số lần hụt audio 91 → 14)
+    priority: str = "high"
     model: str = "large-v3"
     compute_type: str = "int8_float16"
     device: str = "cuda"
@@ -38,6 +41,7 @@ class Config:
     tts_loanwords: bool = False
     tts_first_chunk_frames: int = 1   # 1 frame = 80ms audio
     tts_max_chunk_frames: int = 16
+    tts_cuda_graph: bool = True       # CUDA Graph cho local_frame_decode, đỡ giật khi CPU bận (zerotts_gpu.py)
     # Bridge tới Claude: mặc định "none" để test không gọi Claude; config.toml chọn claude_cli/clipboard
     bridge_kind: str = "none"
     bridge_auto_ask: bool = True  # transcript xong thì tự hỏi Claude

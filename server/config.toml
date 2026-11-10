@@ -6,6 +6,8 @@ port = 8765
 # Điện thoại cùng Wi-Fi mở https://<IP máy>:8766 (chứng chỉ tự ký, tạo theo README). 0 = tắt.
 # Không có đăng nhập: máy nào trong mạng LAN cũng dùng được; đừng port-forward cổng này ra Internet.
 lan_port = 8766
+# Máy chạy nhiều app thì TTS bị chen CPU, giọng giật: high giảm số lần hụt audio 91 -> 14 (normal / above_normal / high)
+priority = "high"
 
 [stt]
 # Chọn theo benchmark Phase 1 (_local/stt_report.md)
@@ -27,6 +29,7 @@ threads = 4
 loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
 first_chunk_frames = 2    # mẩu 160ms từ đầu: không giật ở bench không STT (_local/tts_chunk)
 max_chunk_frames = 2
+cuda_graph = true         # local_frame_decode chạy CUDA Graph: bớt việc CPU, audio trùng bản gốc (server/tts/zerotts_gpu.py)
 
 [bridge]
 # claude_cli: gọi `claude -p` (Claude Code, dùng gói subscription đã đăng nhập), giữ ngữ cảnh bằng --resume

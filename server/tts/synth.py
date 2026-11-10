@@ -21,14 +21,22 @@ class ZeroTtsEngine:
     REPO = "zeroweight-ai/ZeroTTS"
 
     def __init__(self, voice: str = "maichi", device: str = "cuda", threads: int = 4,
-                 first_chunk_frames: int = 1, max_chunk_frames: int = 16):
+                 first_chunk_frames: int = 1, max_chunk_frames: int = 16, gpu_state: bool = True,
+                 cuda_graph: bool = True):
         providers = ["CPUExecutionProvider"]
         if device == "cuda":
             # onnxruntime-gpu dùng cuDNN/cuBLAS có sẵn trong torch/lib; phải nạp torch trước khi tạo session
             import torch  # noqa: F401
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
         from zerotts import ZeroTTS
-        self.tts = ZeroTTS.from_pretrained(self.REPO, providers=providers, intra_op_num_threads=threads)
+        if device == "cuda" and gpu_state:
+            # Bớt việc cho CPU (CUDA Graph + state nằm trên GPU) để máy bận vẫn đọc kịp, xem zerotts_gpu.py
+            from .zerotts_gpu import ZeroTtsGpu
+            self.tts = ZeroTtsGpu.from_pretrained(self.REPO, providers=providers, intra_op_num_threads=threads,
+                                                  cuda_graph=cuda_graph)
+        else:
+            self.tts = ZeroTTS.from_pretrained(self.REPO, providers=providers, intra_op_num_threads=threads)
+        self.cuda_graph = getattr(self.tts, "graph", None) is not None
         self.sample_rate = self.tts.sample_rate
         self.voice = voice
         self.chunking = dict(first_chunk_frames=first_chunk_frames, max_chunk_frames=max_chunk_frames)
