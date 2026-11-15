@@ -3,6 +3,8 @@
   <id>/doc.md        nội dung đã chuyển thành text; Claude đọc file này bằng tool Read (cwd = thư mục tài liệu)
   <id>/meta.json     tiêu đề, tiến độ (phần đang học / tổng số phần, tên các phần), session Claude
   <id>/history.jsonl các lượt đã giảng xong: câu bạn hỏi + câu Mimi trả lời (đã bỏ dòng tiến độ)
+  order.json         thứ tự người dùng kéo thả (chỉ có sau lần sắp xếp đầu tiên)
+  subjects.json      các lớp học (môn) theo thứ tự hiển thị; mỗi tài liệu ghi id lớp trong meta.json
 
 Tiến độ lấy từ dòng `[Phần k/N: Tên phần]` Claude viết đầu mỗi lượt giảng (prompts/study_reply.md):
 MarkerFilter cắt dòng đó khỏi stream để không đọc thành tiếng.
@@ -23,6 +25,8 @@ from xml.etree import ElementTree as ET
 TEXT_EXT = {".txt", ".md", ".markdown"}
 DOCX_EXT = {".docx"}
 MAX_LINE = 1000   # tool Read cắt dòng dài hơn 2000 ký tự: dòng dán vào quá dài thì ngắt ở khoảng trắng
+ORDER_FILE = "order.json"   # thứ tự kéo thả trong thư viện: danh sách id, không có file = học gần nhất trước
+SUBJECTS_FILE = "subjects.json"   # các lớp học theo thứ tự hiển thị
 _ID = re.compile(r"^[0-9]{8}-[0-9]{6}(-[0-9]+)?$")
 
 
@@ -42,12 +46,43 @@ class StudyDoc:
     part: int = 0                    # phần đang giảng (0 = chưa bắt đầu)
     total: int = 0                   # tổng số phần Claude chia (0 = chưa biết)
     parts: dict[str, str] = field(default_factory=dict)   # "k" → tên phần
+    subject: str | None = None       # id lớp học (None = chưa xếp lớp)
 
     def public(self) -> dict:
         d = asdict(self)
         d.pop("session_id")
         d["started"] = self.session_id is not None
         return d
+
+
+@dataclass
+class Subject:
+    """Lớp học (môn): nhóm tài liệu. Thứ tự trong subjects.json là thứ tự hiển thị."""
+    id: str
+    name: str
+    created: float
+
+
+def _new_id(base: str, taken) -> str:
+    """base, nếu đã có thì base-2, base-3…"""
+    new_id, n = base, 1
+    while taken(new_id):
+        n += 1
+        new_id = f"{base}-{n}"
+    return new_id
+
+
+def _id_list(ids) -> list[str]:
+    if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        raise StudyError("Thứ tự phải là danh sách id")
+    return ids
+
+
+def _read_json(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 # ---------- Chuyển file thành text ----------
@@ -189,21 +224,20 @@ class Library:
             raise StudyError("Không có tài liệu này")
         return self.root / doc_id
 
-    def create(self, text: str, title: str = "", source: str = "paste") -> StudyDoc:
+    def create(self, text: str, title: str = "", source: str = "paste", subject: str | None = None) -> StudyDoc:
         text = clean_text(text)
         if len(text.strip()) < 20:
             raise StudyError("Tài liệu trống hoặc quá ngắn")
         if len(text) > self.max_chars:
             raise StudyError(f"Tài liệu dài {len(text):,} ký tự, quá giới hạn {self.max_chars:,}. "
                              "Chia nhỏ thành vài tài liệu (mỗi chương một tài liệu).")
+        if subject is not None:
+            self._subject(subject)
         self.root.mkdir(parents=True, exist_ok=True)
-        base = time.strftime("%Y%m%d-%H%M%S")
-        doc_id, n = base, 1
-        while (self.root / doc_id).exists():
-            n += 1
-            doc_id = f"{base}-{n}"
+        doc_id = _new_id(time.strftime("%Y%m%d-%H%M%S"), lambda i: (self.root / i).exists())
         now = time.time()
-        doc = StudyDoc(doc_id, title.strip()[:120] or guess_title(text, source), source, len(text), now, now)
+        doc = StudyDoc(doc_id, title.strip()[:120] or guess_title(text, source), source, len(text), now, now,
+                       subject=subject)
         d = self.root / doc_id
         d.mkdir()
         (d / "doc.md").write_text(text, encoding="utf-8")
@@ -217,17 +251,132 @@ class Library:
         return StudyDoc(**json.loads(path.read_text(encoding="utf-8")))
 
     def all(self) -> list[StudyDoc]:
-        """Mọi tài liệu, học gần nhất trước."""
+        """Mọi tài liệu. Chưa sắp xếp tay thì học gần nhất trước; đã sắp xếp (order.json) thì theo thứ tự đó,
+        tài liệu thêm hoặc chuyển lớp sau lần sắp xếp đứng đầu (mới nhất trước).
+        Tài liệu thuộc lớp không còn tồn tại thì coi như chưa xếp lớp (subject = None)."""
         if not self.root.exists():
             return []
+        subjects = {s.id for s in self.subjects()}
         docs = []
         for d in self.root.iterdir():
             if d.is_dir() and _ID.match(d.name) and (d / "meta.json").exists():
                 try:
-                    docs.append(self.get(d.name))
+                    doc = self.get(d.name)
                 except (ValueError, TypeError, StudyError):
                     continue  # meta hỏng: bỏ qua, không làm hỏng cả danh sách
-        return sorted(docs, key=lambda x: x.updated, reverse=True)
+                if doc.subject not in subjects:
+                    doc.subject = None
+                docs.append(doc)
+        docs.sort(key=lambda x: x.updated, reverse=True)
+        order = self._order()
+        if order is None:
+            return docs
+        rank = {doc_id: i for i, doc_id in enumerate(order)}
+        new = [d for d in docs if d.id not in rank]
+        return new + sorted((d for d in docs if d.id in rank), key=lambda d: rank[d.id])
+
+    @property
+    def manual_order(self) -> bool:
+        """Người dùng đã kéo thả sắp xếp: học bài không đưa tài liệu lên đầu nữa."""
+        return self._order() is not None
+
+    def _order(self) -> list[str] | None:
+        ids = _read_json(self.root / ORDER_FILE)
+        return [i for i in ids if isinstance(i, str)] if isinstance(ids, list) else None  # không có/hỏng: học gần nhất
+
+    def reorder(self, ids: list[str]) -> list[StudyDoc]:
+        """Lưu thứ tự kéo thả của một nhóm tài liệu (thường là các bài trong một lớp): các tài liệu trong ids đổi chỗ
+        cho nhau theo thứ tự mới, tài liệu khác giữ nguyên chỗ. Id không tồn tại bị bỏ."""
+        ids = _id_list(ids)
+        current = [d.id for d in self.all()]
+        want = [i for i in dict.fromkeys(ids) if i in set(current)]
+        chosen, it = set(want), iter(want)
+        self._write_json(ORDER_FILE, [next(it) if i in chosen else i for i in current])
+        return self.all()
+
+    def move(self, doc_id: str, subject: str | None) -> StudyDoc:
+        """Chuyển tài liệu sang lớp khác (None = chưa xếp lớp). Đã sắp xếp tay thì tài liệu lên đầu lớp mới."""
+        if subject is not None:
+            if not isinstance(subject, str):
+                raise StudyError("Không có lớp này")
+            self._subject(subject)
+        doc = self.get(doc_id)
+        doc.subject = subject
+        self.save(doc, touch=False)
+        if (order := self._order()) is not None and doc_id in order:
+            order.remove(doc_id)
+            self._write_json(ORDER_FILE, order)
+        return doc
+
+    # ---------- Lớp học (subjects.json: danh sách theo thứ tự hiển thị) ----------
+
+    def subjects(self) -> list[Subject]:
+        raw = _read_json(self.root / SUBJECTS_FILE)
+        out = []
+        for s in raw if isinstance(raw, list) else []:
+            try:
+                out.append(Subject(**s))
+            except TypeError:
+                continue
+        return out
+
+    def _subject(self, sid: str) -> Subject:
+        for s in self.subjects():
+            if s.id == sid:
+                return s
+        raise StudyError("Không có lớp này")
+
+    def _subject_name(self, name: str, skip: str | None = None) -> str:
+        name = " ".join(str(name or "").split())[:60]
+        if not name:
+            raise StudyError("Tên lớp trống")
+        if any(s.name.casefold() == name.casefold() and s.id != skip for s in self.subjects()):
+            raise StudyError(f'Đã có lớp "{name}"')
+        return name
+
+    def create_subject(self, name: str) -> Subject:
+        """Lớp mới đứng cuối danh sách."""
+        name = self._subject_name(name)
+        subs = self.subjects()
+        taken = {s.id for s in subs}
+        sub = Subject(_new_id("s" + time.strftime("%Y%m%d-%H%M%S"), taken.__contains__), name, time.time())
+        self._write_json(SUBJECTS_FILE, [asdict(s) for s in [*subs, sub]])
+        return sub
+
+    def rename_subject(self, sid: str, name: str) -> Subject:
+        name = self._subject_name(name, skip=sid)
+        subs = self.subjects()
+        self._subject(sid)
+        for s in subs:
+            if s.id == sid:
+                s.name = name
+        self._write_json(SUBJECTS_FILE, [asdict(s) for s in subs])
+        return self._subject(sid)
+
+    def delete_subject(self, sid: str) -> None:
+        """Xoá lớp; tài liệu trong lớp chuyển về chưa xếp lớp, không bị xoá."""
+        self._subject(sid)
+        for doc in self.all():
+            if doc.subject == sid:
+                doc.subject = None
+                self.save(doc, touch=False)
+        self._write_json(SUBJECTS_FILE, [asdict(s) for s in self.subjects() if s.id != sid])
+
+    def reorder_subjects(self, ids: list[str]) -> list[Subject]:
+        """Thứ tự kéo thả các lớp; lớp không có trong ids giữ thứ tự cũ, xếp sau."""
+        ids = _id_list(ids)
+        subs = {s.id: s for s in self.subjects()}
+        want = [subs[i] for i in dict.fromkeys(ids) if i in subs]
+        rest = [s for s in subs.values() if s not in want]
+        self._write_json(SUBJECTS_FILE, [asdict(s) for s in want + rest])
+        return self.subjects()
+
+    def _write_json(self, name: str, data) -> None:
+        self.root.mkdir(parents=True, exist_ok=True)
+        path = self.root / name
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.replace(path)
 
     def save(self, doc: StudyDoc, touch: bool = True) -> None:
         if touch:

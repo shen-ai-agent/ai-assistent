@@ -207,6 +207,9 @@ sdesign = "sơ đi zai"
 
 Tab **Học bài**: gửi tài liệu học, Mimi đọc hiểu rồi giảng lại từng phần. Cần `[bridge] kind = "claude_cli"`.
 
+- Trang đầu là danh sách **lớp học** (mỗi môn một lớp: AWS, IELTS…). Bấm vào lớp để thấy các bài và thêm tài liệu vào lớp đó. "Chuyển lớp" để đổi lớp của một bài; tài liệu có từ trước khi có lớp nằm ở "Chưa xếp lớp". Xoá lớp không xoá tài liệu, chỉ chuyển về "Chưa xếp lớp".
+- Kéo tay nắm ⋮⋮ để sắp xếp lớp và bài (chạy cả trên điện thoại; bàn phím: focus tay nắm rồi ↑ ↓).
+
 - Thêm tài liệu: dán text hoặc chọn file `.txt` / `.md` / `.docx` (tối đa 200.000 ký tự). Lưu xong Mimi tự bắt đầu: nói tài liệu có mấy phần rồi giảng phần 1.
 - Mỗi lượt giảng một phần, cuối phần Mimi hỏi lại. Nói "tiếp" để sang phần sau, "giảng lại" nếu chưa hiểu, "kiểm tra mình" để được hỏi bài; hỏi chen bất cứ lúc nào (giữ Space, gõ, hoặc Rảnh tay). Các nút nhanh dưới hội thoại làm việc tương tự.
 - Ghi chú (ý chính, thuật ngữ, code) hiện dưới câu trả lời, không đọc. "Xem tài liệu" để mở bản gốc.

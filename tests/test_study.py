@@ -122,6 +122,59 @@ def test_library_crud(tmp_path):
     assert "session_id" not in second.public() and second.public()["started"] is False
 
 
+def test_library_manual_order(tmp_path):
+    lib = Library(tmp_path, max_chars=1000)
+    a, b, c = (lib.create(DOC, title=t) for t in "ABC")
+    assert not lib.manual_order and [d.id for d in lib.all()] == [c.id, b.id, a.id]
+    # Chỉ gửi một nhóm (các bài trong một lớp): nhóm đổi chỗ cho nhau, b đứng yên
+    assert [d.id for d in lib.reorder([a.id, c.id, "20990101-000000", a.id])] == [a.id, b.id, c.id]
+    assert lib.manual_order
+    lib.set_part(c, 1, 3, "Mở đầu")   # học bài không đổi chỗ khi đã sắp xếp tay
+    assert [d.id for d in lib.all()] == [a.id, b.id, c.id]
+    d = lib.create(DOC, title="D")
+    assert [x.id for x in lib.all()] == [d.id, a.id, b.id, c.id]
+    lib.delete(a.id)
+    assert [x.id for x in lib.all()] == [d.id, b.id, c.id]
+    with pytest.raises(StudyError):
+        lib.reorder("abc")
+    (tmp_path / "order.json").write_text("{hỏng", encoding="utf-8")
+    assert not lib.manual_order and len(lib.all()) == 3
+
+
+def test_library_subjects(tmp_path):
+    lib = Library(tmp_path, max_chars=1000)
+    old = lib.create(DOC, title="Cũ")                     # tài liệu từ trước khi có lớp
+    aws = lib.create_subject("  AWS  ")
+    ielts = lib.create_subject("IELTS")
+    assert aws.name == "AWS" and [s.id for s in lib.subjects()] == [aws.id, ielts.id]
+    with pytest.raises(StudyError, match="Đã có"):
+        lib.create_subject("aws")
+    with pytest.raises(StudyError, match="trống"):
+        lib.create_subject(" ")
+    s3 = lib.create(DOC, title="S3", subject=aws.id)
+    with pytest.raises(StudyError, match="Không có lớp"):
+        lib.create(DOC, subject="s20990101-000000")
+    assert lib.get(old.id).subject is None and lib.get(s3.id).subject == aws.id
+
+    lib.reorder([s3.id, old.id])                          # sắp xếp tay rồi mới chuyển lớp
+    lib.move(old.id, ielts.id)
+    assert lib.get(old.id).subject == ielts.id and lib.all()[0].id == old.id   # lên đầu lớp mới
+    with pytest.raises(StudyError):
+        lib.move(old.id, "s20990101-000000")
+
+    assert lib.rename_subject(ielts.id, "IELTS Reading").name == "IELTS Reading"
+    with pytest.raises(StudyError, match="Đã có"):
+        lib.rename_subject(ielts.id, "AWS")
+    assert [s.id for s in lib.reorder_subjects([ielts.id])] == [ielts.id, aws.id]
+
+    lib.delete_subject(ielts.id)                          # tài liệu không mất, về chưa xếp lớp
+    assert [s.id for s in lib.subjects()] == [aws.id] and lib.get(old.id).subject is None
+    with pytest.raises(StudyError, match="Không có lớp"):
+        lib.delete_subject(ielts.id)
+    (tmp_path / "subjects.json").write_text("[]", encoding="utf-8")   # lớp mất khỏi file: coi như chưa xếp lớp
+    assert all(d.subject is None for d in lib.all())
+
+
 def test_library_rejects_bad_input(tmp_path):
     lib = Library(tmp_path, max_chars=100)
     with pytest.raises(StudyError, match="ngắn"):
@@ -273,6 +326,26 @@ def test_study_tab_over_websocket(tmp_path):
         assert full["text"] == DOC and full["part"] == 1 and full["history"][0]["question"] == "Bắt đầu nhé"
         assert client.post(f"/api/study/{doc['id']}/reset").json()["started"] is False
         assert client.patch(f"/api/study/{doc['id']}", json={"title": "S3 cơ bản"}).json()["title"] == "S3 cơ bản"
+        other = client.post("/api/study", json={"text": DOC}).json()
+        assert client.get("/api/study").json()["manual"] is False
+        order = client.put("/api/study/order", json={"ids": [doc["id"], other["id"]]}).json()
+        assert [d["id"] for d in order["docs"]] == [doc["id"], other["id"]] and order["manual"] is True
+        assert client.put("/api/study/order", json={"ids": "x"}).status_code == 400
+        sub = client.post("/api/study/subjects", json={"name": "AWS"}).json()
+        assert client.post("/api/study/subjects", json={"name": "aws"}).status_code == 400
+        inside = client.post("/api/study", json={"text": DOC, "subject": sub["id"]}).json()
+        assert inside["subject"] == sub["id"]
+        assert client.post("/api/study", json={"text": DOC, "subject": "s20990101-000000"}).status_code == 404
+        moved = client.patch(f"/api/study/{doc['id']}", json={"subject": sub["id"]}).json()
+        assert moved["subject"] == sub["id"] and moved["title"] == "S3 cơ bản"
+        listing = client.get("/api/study").json()
+        assert listing["subjects"] == [sub] and {d["id"] for d in listing["docs"] if d["subject"]} == {doc["id"], inside["id"]}
+        assert client.patch(f"/api/study/subjects/{sub['id']}", json={"name": "Amazon"}).json()["name"] == "Amazon"
+        assert client.put("/api/study/subjects/order", json={"ids": [sub["id"]]}).json()["subjects"][0]["id"] == sub["id"]
+        assert client.patch(f"/api/study/{doc['id']}", json={"subject": None}).json()["subject"] is None
+        assert client.delete(f"/api/study/subjects/{sub['id']}").json() == {"ok": True}
+        assert client.get(f"/api/study/{inside['id']}").json()["subject"] is None
+        assert client.delete(f"/api/study/subjects/{sub['id']}").status_code == 404
         assert client.delete(f"/api/study/{doc['id']}").json() == {"ok": True}
         assert client.get(f"/api/study/{doc['id']}").status_code == 404
 

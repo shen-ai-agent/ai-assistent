@@ -215,7 +215,7 @@ AI-assistent/
 - [x] **Trợ lý rảnh tay (T-010):** mic luôn nghe (VAD Silero streaming), gọi tên "Mimi ơi" / "hey Mimi" thì đáp, ngừng nói thì trả lời; tab Mimi + tab Chi tiết. Bước A (Whisper tìm tên) xong; bước B (openWakeWord) chỉ làm nếu A không đạt DoD
 - [x] Ghi bộ test gọi tên (`data/wake_phrases.tsv`, 48 câu)
 - [ ] Ghi ≥30 phút âm nền, đo bằng `bench/wake_bench.py`
-- [x] **Tab Học bài (T-012, 04/11/2026):** dán text hoặc chọn file .txt/.md/.docx, Mimi đọc hết tài liệu, chia 3–8 phần, giảng từng phần bằng giọng nói, hết phần thì dừng hỏi; "tiếp", "giảng lại", "kiểm tra mình", hỏi chen giữa chừng. Thư viện lưu ở `_local/study/`, mỗi tài liệu một session Claude riêng, mở lại thì học tiếp
+- [x] **Tab Học bài (T-012, 04/11/2026):** dán text hoặc chọn file .txt/.md/.docx, Mimi đọc hết tài liệu, chia 3–8 phần, giảng từng phần bằng giọng nói, hết phần thì dừng hỏi; "tiếp", "giảng lại", "kiểm tra mình", hỏi chen giữa chừng. Thư viện lưu ở `_local/study/`, mỗi tài liệu một session Claude riêng, mở lại thì học tiếp. 14/11/2026: chia tài liệu theo lớp học (môn); trang đầu là danh sách lớp, vào lớp mới chọn bài; chuyển bài giữa các lớp; kéo thả tay nắm ⋮⋮ để sắp xếp lớp và bài
 - [x] Lệnh giọng nói (`server/assistant/commands.py`): "mở session mới", "dừng lại", "đọc lại" chạy ngay trên server, không hỏi Claude. Chỉ câu ngắn mới là lệnh
 - [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)

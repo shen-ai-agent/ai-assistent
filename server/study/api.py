@@ -1,13 +1,15 @@
-"""REST /api/study cho tab Học: thêm, xem, đổi tên, học lại, xoá tài liệu. Giảng bài đi qua WebSocket (message study).
+"""REST /api/study cho tab Học: thêm, xem, đổi tên, chuyển lớp, học lại, xoá, sắp xếp (PUT /order) tài liệu;
+/api/study/subjects: lớp học (môn) để nhóm tài liệu. Giảng bài đi qua WebSocket (message study).
 
 File tải lên gửi bằng JSON base64 (không cần python-multipart): {"filename", "data_b64", "title"?};
-dán text: {"text", "title"?}.
+dán text: {"text", "title"?}. Cả hai nhận thêm "subject" (id lớp) để thêm thẳng vào lớp.
 """
 
 from __future__ import annotations
 
 import base64
 import binascii
+from dataclasses import asdict
 
 from fastapi import APIRouter, Body, HTTPException, Request
 
@@ -29,18 +31,58 @@ def _guard(fn, *args):
     try:
         return fn(*args)
     except StudyError as e:
-        raise HTTPException(400 if "Không có tài liệu" not in str(e) else 404, str(e)) from None
+        raise HTTPException(404 if str(e).startswith(("Không có tài liệu", "Không có lớp")) else 400, str(e)) from None
+
+
+def _listing(lib, docs) -> dict:
+    return {"docs": [d.public() for d in docs], "manual": lib.manual_order,
+            "subjects": [asdict(s) for s in lib.subjects()]}
 
 
 @router.get("")
 async def list_docs(request: Request):
-    return {"docs": [d.public() for d in _study(request).library.all()]}
+    lib = _study(request).library
+    return _listing(lib, lib.all())
+
+
+@router.put("/order")
+async def reorder_docs(request: Request, body: dict = Body(...)):
+    """Thứ tự kéo thả trong thư viện: {"ids": [...]}, trả lại danh sách đã sắp xếp."""
+    lib = _study(request).library
+    return _listing(lib, _guard(lib.reorder, body.get("ids")))
+
+
+# ---------- Lớp học (khai báo trước /{doc_id}) ----------
+
+@router.post("/subjects")
+async def create_subject(request: Request, body: dict = Body(...)):
+    return asdict(_guard(_study(request).library.create_subject, body.get("name")))
+
+
+@router.put("/subjects/order")
+async def reorder_subjects(request: Request, body: dict = Body(...)):
+    return {"subjects": [asdict(s) for s in _guard(_study(request).library.reorder_subjects, body.get("ids"))]}
+
+
+@router.patch("/subjects/{sid}")
+async def rename_subject(request: Request, sid: str, body: dict = Body(...)):
+    return asdict(_guard(_study(request).library.rename_subject, sid, body.get("name")))
+
+
+@router.delete("/subjects/{sid}")
+async def delete_subject(request: Request, sid: str):
+    """Tài liệu trong lớp chuyển về chưa xếp lớp."""
+    _guard(_study(request).library.delete_subject, sid)
+    return {"ok": True}
 
 
 @router.post("")
 async def create_doc(request: Request, body: dict = Body(...)):
     lib = _study(request).library
     title = body.get("title") or ""
+    subject = body.get("subject")
+    if subject is not None and not isinstance(subject, str):
+        raise HTTPException(400, "subject phải là id lớp")
     if body.get("data_b64") is not None:
         filename = str(body.get("filename") or "")
         try:
@@ -50,9 +92,9 @@ async def create_doc(request: Request, body: dict = Body(...)):
         if len(data) > MAX_UPLOAD:
             raise HTTPException(400, f"File lớn quá {MAX_UPLOAD // 2**20}MB")
         text = _guard(extract_text, filename, data)
-        doc = _guard(lambda: lib.create(text, str(title), filename))
+        doc = _guard(lambda: lib.create(text, str(title), filename, subject))
     elif isinstance(body.get("text"), str):
-        doc = _guard(lambda: lib.create(body["text"], str(title), "paste"))
+        doc = _guard(lambda: lib.create(body["text"], str(title), "paste", subject))
     else:
         raise HTTPException(400, "Cần text hoặc file")
     return doc.public()
@@ -66,8 +108,15 @@ async def get_doc(request: Request, doc_id: str):
 
 
 @router.patch("/{doc_id}")
-async def rename_doc(request: Request, doc_id: str, body: dict = Body(...)):
-    return _guard(_study(request).library.rename, doc_id, str(body.get("title") or "")).public()
+async def update_doc(request: Request, doc_id: str, body: dict = Body(...)):
+    """{"title"?} đổi tên, {"subject"?} chuyển lớp (null = chưa xếp lớp)."""
+    lib = _study(request).library
+    doc = _guard(lib.get, doc_id)
+    if "title" in body:
+        doc = _guard(lib.rename, doc_id, str(body.get("title") or ""))
+    if "subject" in body:
+        doc = _guard(lib.move, doc_id, body["subject"])
+    return doc.public()
 
 
 @router.post("/{doc_id}/reset")

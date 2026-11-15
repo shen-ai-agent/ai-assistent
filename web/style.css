@@ -399,7 +399,7 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .study-form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
 .study-form h2 { margin: 0 0 2px; }
 .study-form .hint { margin: 4px 0 10px; line-height: 1.5; }
-#study-title, #study-text { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333a46; border-radius: 8px;
+#study-title, #study-text, #subject-name { width: 100%; background: var(--bg); color: var(--text); border: 1px solid #333a46; border-radius: 8px;
   padding: 8px; font: 15px/1.4 system-ui, sans-serif; }
 #study-title { margin-bottom: 8px; }
 #study-text { resize: vertical; }
@@ -409,12 +409,37 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .file-btn.secondary:hover { color: var(--text); }
 .file-btn.busy { opacity: .5; pointer-events: none; }
 #study-empty { margin: 8px 2px; font-size: 13px; }
+#subject-name { flex: 1; width: auto; min-width: 160px; }
+#subject-empty { margin: 10px 2px; font-size: 13px; }
+#subject-loose:not(:empty) { margin-top: 10px; }
+.subject-card .doc-title { font-size: 16px; }
+.subject-card.loose { border-style: dashed; }
+.subject-card.loose .doc-open { border-radius: 10px; }
+.lib-head { padding-top: 0; margin-bottom: 4px; }
+.lib-head h2 { font-size: 18px; }
+.study-add-box { margin-top: 14px; }
+.study-add-box > summary { cursor: pointer; color: var(--accent); font-size: 14px; padding: 6px 2px; }
+.study-add-box[open] > summary { margin-bottom: 6px; }
+.move-dlg { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+  padding: 16px; width: min(380px, calc(100vw - 32px)); }
+.move-dlg::backdrop { background: #000a; }
+.move-dlg h3 { margin: 0 0 10px; font-size: 15px; overflow-wrap: anywhere; }
+.move-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.move-list button { text-align: left; padding: 9px 12px; color: var(--text); }
+.move-list button:disabled { background: transparent; color: var(--muted); }
 .study-list { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
 .doc-card { display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   min-width: 0; }
 .doc-card:hover { border-color: #3a4152; }
 .doc-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; text-align: left;
   background: none; color: var(--text); border-radius: 10px 0 0 10px; }
+.doc-handle { flex: none; width: 26px; padding: 0; background: none; color: var(--muted); font-size: 15px; letter-spacing: -1px;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; border-radius: 10px 0 0 10px; }
+.doc-handle:not([hidden]) + .doc-open { padding-left: 4px; border-radius: 0; }
+.doc-handle:hover, .doc-handle:focus-visible { color: var(--text); }
+.doc-card.dragging { border-color: var(--accent); box-shadow: 0 6px 18px #0008; opacity: .92; }
+.doc-card.dragging .doc-handle { cursor: grabbing; }
+.study-list:has(.dragging) { user-select: none; -webkit-user-select: none; }
 .doc-title { font-weight: 600; overflow-wrap: anywhere; }
 .doc-meta { font-size: 12px; color: var(--muted); }
 .doc-progress { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #c7cede; margin-top: 2px; }

@@ -122,27 +122,60 @@
 </main>
 
 <main id="tab-study" class="tab study" hidden>
-  <section id="study-lib" class="study-lib">
-    <form id="study-form" class="study-form" autocomplete="off">
-      <h2>Thêm tài liệu</h2>
-      <p class="hint">Dán nội dung bài học hoặc chọn file <code>.txt</code>, <code>.md</code>, <code>.docx</code>.
-        <span class="wake-name">Mimi</span> đọc hết, chia thành từng phần rồi giảng lần lượt, hết mỗi phần dừng hỏi bạn.</p>
-      <input id="study-title" type="text" placeholder="Tên tài liệu (để trống thì lấy dòng đầu)">
-      <textarea id="study-text" rows="6" spellcheck="false" placeholder="Dán nội dung tài liệu vào đây…"></textarea>
+  <!-- Trang đầu: danh sách lớp (môn). Bấm lớp → bài trong lớp (study-lib) → học một bài (study-doc) -->
+  <section id="study-home" class="study-home">
+    <form id="subject-form" class="study-form" autocomplete="off">
+      <h2>Lớp học</h2>
+      <p class="hint">Mỗi môn một lớp (AWS, IELTS, TOEIC…). Vào lớp để thêm tài liệu; kéo <b>⋮⋮</b> để sắp xếp.</p>
       <div class="study-bar">
-        <button id="study-add" type="submit" disabled>Lưu và bắt đầu học</button>
-        <label class="file-btn secondary" title="Chọn file là lưu luôn">Chọn file…<input id="study-file" type="file" accept=".txt,.md,.markdown,.docx" hidden></label>
-        <span id="study-note" class="hint"></span>
+        <input id="subject-name" type="text" maxlength="60" placeholder="Tên lớp mới…">
+        <button id="subject-add" type="submit">Thêm lớp</button>
+        <span id="subject-note" class="hint"></span>
       </div>
     </form>
-    <h2>Thư viện</h2>
-    <p id="study-empty" class="empty">Chưa có tài liệu nào.</p>
-    <ol id="study-list" class="study-list"></ol>
+    <p id="subject-empty" class="empty">Chưa có lớp nào.</p>
+    <ol id="subject-list" class="study-list"></ol>
+    <ol id="subject-loose" class="study-list"></ol>
   </section>
+
+  <section id="study-lib" class="study-lib" hidden>
+    <div class="study-head lib-head">
+      <button id="lib-back" type="button" class="secondary" title="Về danh sách lớp">←</button>
+      <div class="study-title">
+        <h2 id="lib-title"></h2>
+        <p id="lib-meta" class="orb-status"></p>
+      </div>
+    </div>
+    <p id="study-empty" class="empty">Lớp này chưa có tài liệu.</p>
+    <ol id="study-list" class="study-list"></ol>
+    <details id="study-add-box" class="study-add-box">
+      <summary>＋ Thêm tài liệu vào lớp</summary>
+      <form id="study-form" class="study-form" autocomplete="off">
+        <p class="hint">Dán nội dung bài học hoặc chọn file <code>.txt</code>, <code>.md</code>, <code>.docx</code>.
+          <span class="wake-name">Mimi</span> đọc hết, chia thành từng phần rồi giảng lần lượt, hết mỗi phần dừng hỏi bạn.</p>
+        <input id="study-title" type="text" placeholder="Tên tài liệu (để trống thì lấy dòng đầu)">
+        <textarea id="study-text" rows="6" spellcheck="false" placeholder="Dán nội dung tài liệu vào đây…"></textarea>
+        <div class="study-bar">
+          <button id="study-add" type="submit" disabled>Lưu và bắt đầu học</button>
+          <label class="file-btn secondary" title="Chọn file là lưu luôn">Chọn file…<input id="study-file" type="file" accept=".txt,.md,.markdown,.docx" hidden></label>
+          <span id="study-note" class="hint"></span>
+        </div>
+      </form>
+    </details>
+  </section>
+
+  <dialog id="move-dlg" class="move-dlg">
+    <h3 id="move-title"></h3>
+    <div id="move-list" class="move-list"></div>
+    <div class="study-bar">
+      <button id="move-new" type="button" class="secondary">＋ Lớp mới…</button>
+      <button id="move-cancel" type="button" class="secondary">Huỷ</button>
+    </div>
+  </dialog>
 
   <section id="study-doc" class="study-doc" hidden>
     <div class="study-head">
-      <button id="study-back" type="button" class="secondary" title="Về thư viện">←</button>
+      <button id="study-back" type="button" class="secondary" title="Về lớp">←</button>
       <div id="study-orb" class="orb mini off" aria-hidden="true">
         <div class="halo"></div>
         <div class="sphere"><i class="fog"></i><i class="r1"></i><i class="r2"></i><i class="r3"></i><i class="r4"></i></div>
@@ -257,14 +290,31 @@
 
 <template id="doc-tpl">
   <li class="doc-card">
+    <button type="button" class="doc-handle" title="Kéo để sắp xếp (hoặc ↑ ↓)" aria-label="Kéo để sắp xếp">⋮⋮</button>
     <button type="button" class="doc-open">
       <span class="doc-title"></span>
       <span class="doc-meta"></span>
       <span class="doc-progress"><span class="bar"><span class="fill"></span></span><span class="doc-part"></span></span>
     </button>
     <div class="doc-actions">
+      <button type="button" class="link doc-move">Chuyển lớp</button>
       <button type="button" class="link doc-rename">Đổi tên</button>
       <button type="button" class="link danger doc-delete">Xoá</button>
+    </div>
+  </li>
+</template>
+
+<template id="subject-tpl">
+  <li class="doc-card subject-card">
+    <button type="button" class="doc-handle" title="Kéo để sắp xếp (hoặc ↑ ↓)" aria-label="Kéo để sắp xếp">⋮⋮</button>
+    <button type="button" class="doc-open">
+      <span class="doc-title"></span>
+      <span class="doc-meta"></span>
+      <span class="doc-progress"><span class="bar"><span class="fill"></span></span><span class="doc-part"></span></span>
+    </button>
+    <div class="doc-actions">
+      <button type="button" class="link subject-rename">Đổi tên</button>
+      <button type="button" class="link danger subject-delete">Xoá</button>
     </div>
   </li>
 </template>

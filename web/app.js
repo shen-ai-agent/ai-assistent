@@ -32,7 +32,13 @@ const ui = {
   workYou: $("work-you"), workMimi: $("work-mimi"), workChoices: $("work-choices"),
   studyTab: $("study-tab"), studyLib: $("study-lib"), studyForm: $("study-form"), studyTitle: $("study-title"),
   studyText: $("study-text"), studyAdd: $("study-add"), studyFile: $("study-file"), studyNote: $("study-note"),
-  studyEmpty: $("study-empty"), studyList: $("study-list"), docTpl: $("doc-tpl"),
+  studyEmpty: $("study-empty"), studyList: $("study-list"), docTpl: $("doc-tpl"), studyAddBox: $("study-add-box"),
+  studyHome: $("study-home"), subjectForm: $("subject-form"), subjectName: $("subject-name"),
+  subjectNote: $("subject-note"), subjectEmpty: $("subject-empty"), subjectList: $("subject-list"),
+  subjectLoose: $("subject-loose"), subjectTpl: $("subject-tpl"),
+  libBack: $("lib-back"), libTitle: $("lib-title"), libMeta: $("lib-meta"),
+  moveDlg: $("move-dlg"), moveTitle: $("move-title"), moveList: $("move-list"), moveNew: $("move-new"),
+  moveCancel: $("move-cancel"),
   studyDoc: $("study-doc"), studyBack: $("study-back"), studyOrb: $("study-orb"), studyDocTitle: $("study-doc-title"),
   studyStatus: $("study-status"), studyHf: $("study-hf"), studyBar: $("study-bar"), studyProgress: $("study-progress"),
   studyReset: $("study-reset"), studySource: $("study-source"), studySourceText: $("study-source-text"),
@@ -49,7 +55,10 @@ const tasks = { info: undefined, projects: [], items: new Map(), cards: new Map(
 
 // Học bài (T-012). info: hello.study (undefined = chưa nhận hello, null = server tắt). docs: thư viện (doc.public()).
 // docId: tài liệu đang mở (nhớ qua lần tải lại); doc: bản đầy đủ đã tải (thêm text, history); loading: id đang tải.
-const study = { info: undefined, docs: [], docId: localStorage.getItem("studyDoc") || null, doc: null, loading: null };
+// manual: đã kéo thả sắp xếp (server có order.json) thì học bài không đưa tài liệu lên đầu; dragging: đang kéo.
+// subject: lớp đang mở (null = danh sách lớp, "" = chưa xếp lớp), nhớ qua localStorage như docId.
+const study = { info: undefined, docs: [], docId: localStorage.getItem("studyDoc") || null, doc: null, loading: null,
+  manual: false, dragging: false, subjects: [], subject: localStorage.getItem("studySubject") };
 
 // ---------- Tab: #mimi (mặc định) / #tasks / #study / #detail, một trang để dùng chung WebSocket và mic ----------
 
@@ -1674,13 +1683,30 @@ function sendStudy() {
   if (study.info) send({ type: "study", doc_id: studyActive() ? study.doc.id : null });
 }
 
+// Ba màn: danh sách lớp (study.subject === null) → bài trong lớp (id lớp, "" = chưa xếp lớp) → một bài (docId)
 async function loadDocs() {
   try {
-    study.docs = (await studyApi()).docs;
+    ({ docs: study.docs, manual: study.manual, subjects: study.subjects } = await studyApi());
   } catch (e) {
-    ui.studyNote.textContent = `Không tải được thư viện: ${e.message}`;
+    ui.subjectNote.textContent = `Không tải được thư viện: ${e.message}`;
   }
+  if (study.subject && !study.subjects.some((s) => s.id === study.subject)) setSubject(null); // lớp đã bị xoá
   renderDocList();
+  renderStudyView();
+}
+
+function setSubject(id) {
+  study.subject = id;
+  if (id === null) localStorage.removeItem("studySubject");
+  else localStorage.setItem("studySubject", id);
+}
+
+function subjectDocs(id) {
+  return study.docs.filter((d) => (d.subject ?? "") === id);
+}
+
+function subjectName(id) {
+  return id ? study.subjects.find((s) => s.id === id)?.name ?? "…" : "Chưa xếp lớp";
 }
 
 function partLabel(d) {
@@ -1689,28 +1715,271 @@ function partLabel(d) {
   return `Phần ${d.part}/${d.total}${name ? `: ${name}` : ""}`;
 }
 
+const docDone = (d) => d.total > 0 && d.part >= d.total;
+
+// Vẽ lại cả danh sách lớp lẫn danh sách bài của lớp đang mở (rẻ, vài chục thẻ)
 function renderDocList() {
-  ui.studyEmpty.hidden = study.docs.length > 0;
-  ui.studyList.replaceChildren(...study.docs.map((d) => {
+  if (study.dragging) return; // đang kéo: vẽ lại khi thả
+  renderSubjects();
+  const docs = subjectDocs(study.subject ?? "");
+  ui.libTitle.textContent = subjectName(study.subject);
+  const done = docs.filter(docDone).length;
+  ui.libMeta.textContent = docs.length ? `${docs.length} bài${done ? ` · xong ${done}` : ""}` : "";
+  ui.studyEmpty.hidden = docs.length > 0;
+  ui.studyList.replaceChildren(...docs.map((d) => {
     const li = ui.docTpl.content.firstElementChild.cloneNode(true);
+    li.dataset.id = d.id;
+    sortable(li, ui.studyList, docs.length, saveDocOrder);
     li.querySelector(".doc-title").textContent = d.title;
     li.querySelector(".doc-meta").textContent = [d.source === "paste" ? "dán text" : d.source,
       `${d.chars.toLocaleString("vi-VN")} ký tự`, timeAgo(d.updated)].join(" · ");
     li.querySelector(".fill").style.width = `${d.total ? (100 * d.part) / d.total : 0}%`;
     li.querySelector(".doc-part").textContent = partLabel(d);
     li.querySelector(".doc-open").onclick = () => openDoc(d.id);
+    li.querySelector(".doc-move").onclick = () => moveDoc(d);
     li.querySelector(".doc-rename").onclick = () => renameDoc(d);
     li.querySelector(".doc-delete").onclick = () => deleteDoc(d);
     return li;
   }));
 }
 
-// Thư viện hay một tài liệu; tài liệu nhớ từ lần trước thì tải khi mở tab
+function subjectCard(id, name) {
+  const docs = subjectDocs(id);
+  const li = ui.subjectTpl.content.firstElementChild.cloneNode(true);
+  li.dataset.id = id;
+  li.querySelector(".doc-title").textContent = name;
+  const done = docs.filter(docDone).length;
+  const last = docs.reduce((a, d) => (!a || d.updated > a.updated ? d : a), null);
+  li.querySelector(".doc-meta").textContent = [docs.length ? `${docs.length} bài` : "Chưa có bài",
+    done && `xong ${done}`, last && timeAgo(last.updated)].filter(Boolean).join(" · ");
+  const progress = docs.reduce((sum, d) => sum + (d.total ? d.part / d.total : 0), 0) / (docs.length || 1);
+  li.querySelector(".fill").style.width = `${100 * progress}%`;
+  li.querySelector(".doc-part").textContent = last?.started ? `Gần nhất: ${last.title}` : "";
+  li.querySelector(".doc-open").onclick = () => openSubject(id);
+  return li;
+}
+
+function renderSubjects() {
+  ui.subjectEmpty.hidden = study.subjects.length > 0;
+  ui.subjectList.replaceChildren(...study.subjects.map((s) => {
+    const li = subjectCard(s.id, s.name);
+    sortable(li, ui.subjectList, study.subjects.length, saveSubjectOrder);
+    li.querySelector(".subject-rename").onclick = () => renameSubject(s);
+    li.querySelector(".subject-delete").onclick = () => deleteSubject(s);
+    return li;
+  }));
+  // Tài liệu chưa thuộc lớp nào (có từ trước khi có lớp, hoặc lớp đã xoá): một thẻ riêng ở cuối, không kéo được
+  const loose = subjectDocs("").length > 0;
+  ui.subjectLoose.replaceChildren(...(loose ? [subjectCard("", "Chưa xếp lớp")] : []));
+  for (const li of ui.subjectLoose.children) {
+    li.classList.add("loose");
+    li.querySelector(".doc-handle").hidden = true;
+    li.querySelector(".doc-actions").remove();
+  }
+}
+
+// Kéo thả sắp xếp bằng pointer events trên tay nắm ⋮⋮: chạy cả chuột lẫn cảm ứng (HTML5 drag-and-drop không chạy
+// trên điện thoại). Thẻ đi theo ngón tay bằng cách chuyển chỗ trong DOM; thả ra thì gọi save(ids) nếu thứ tự đổi.
+// Bàn phím: focus tay nắm rồi ↑ ↓ để chuyển thẻ lên/xuống một bậc.
+function sortable(li, list, count, save) {
+  const handle = li.querySelector(".doc-handle");
+  handle.hidden = count < 2;
+  handle.onpointerdown = (e) => dragCard(e, li, list, save);
+  handle.onkeydown = (e) => nudgeCard(e, li, list, save);
+}
+
+// Nghe move/up trên window, không dùng setPointerCapture: chuyển thẻ trong DOM làm trình duyệt huỷ capture của tay nắm,
+// khi đó pointerup không về tay nắm và study.dragging kẹt (danh sách không vẽ lại nữa).
+function dragCard(e, li, list, save) {
+  if (e.button !== 0 || study.dragging) return;
+  e.preventDefault();
+  const id = e.pointerId;
+  const before = listOrder(list);
+  study.dragging = true;
+  li.classList.add("dragging");
+  const move = (ev) => {
+    if (ev.pointerId !== id) return;
+    if (ev.clientY < 60) scrollBy(0, -12); // gần mép màn hình thì cuộn theo
+    else if (ev.clientY > innerHeight - 60) scrollBy(0, 12);
+    const next = [...list.children].find((x) => {
+      if (x === li) return false;
+      const r = x.getBoundingClientRect();
+      return ev.clientY < r.top + r.height / 2;
+    });
+    if (!next) {
+      if (list.lastElementChild !== li) list.append(li);
+    } else if (li.nextElementSibling !== next) list.insertBefore(li, next);
+  };
+  const end = (ev) => {
+    if (ev.pointerId !== id) return;
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", end);
+    removeEventListener("pointercancel", end);
+    study.dragging = false;
+    li.classList.remove("dragging");
+    const after = listOrder(list);
+    if (after.join() !== before.join()) save(after);
+    else renderDocList(); // có thể đã bỏ qua lượt vẽ lại trong lúc kéo
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", end);
+  addEventListener("pointercancel", end);
+}
+
+function nudgeCard(e, li, list, save) {
+  const up = e.key === "ArrowUp", down = e.key === "ArrowDown";
+  if (!up && !down) return;
+  e.preventDefault();
+  const other = up ? li.previousElementSibling : li.nextElementSibling;
+  if (!other) return;
+  other.insertAdjacentElement(up ? "beforebegin" : "afterend", li);
+  li.querySelector(".doc-handle").focus();
+  save(listOrder(list));
+}
+
+function listOrder(list) {
+  return [...list.children].map((x) => x.dataset.id);
+}
+
+// Các bài trong lớp đổi chỗ cho nhau, bài lớp khác giữ nguyên chỗ (giống Library.reorder ở server)
+async function saveDocOrder(ids) {
+  const byId = new Map(study.docs.map((d) => [d.id, d]));
+  const queue = ids.filter((id) => byId.has(id));
+  const chosen = new Set(queue);
+  study.docs = study.docs.map((d) => (chosen.has(d.id) ? byId.get(queue.shift()) : d));
+  study.manual = true;
+  try {
+    ({ docs: study.docs, manual: study.manual, subjects: study.subjects } = await studyApi("/order", "PUT", { ids }));
+  } catch (e) {
+    alert(`Không lưu được thứ tự: ${e.message}`);
+    return void loadDocs();
+  }
+  // Server trả cùng thứ tự thì khỏi vẽ lại (giữ focus tay nắm khi dùng ↑ ↓)
+  const shown = subjectDocs(study.subject ?? "").map((d) => d.id);
+  if (listOrder(ui.studyList).join() !== shown.join()) renderDocList();
+}
+
+async function saveSubjectOrder(ids) {
+  const byId = new Map(study.subjects.map((s) => [s.id, s]));
+  study.subjects = ids.map((id) => byId.get(id)).filter(Boolean);
+  try {
+    ({ subjects: study.subjects } = await studyApi("/subjects/order", "PUT", { ids }));
+  } catch (e) {
+    ui.subjectNote.textContent = `Không lưu được thứ tự: ${e.message}`;
+    return void loadDocs();
+  }
+  if (listOrder(ui.subjectList).join() !== study.subjects.map((s) => s.id).join()) renderDocList();
+}
+
+// Danh sách lớp, bài trong một lớp, hay một bài; bài nhớ từ lần trước thì tải khi mở tab
 function renderStudyView() {
-  ui.studyLib.hidden = !!study.docId;
-  ui.studyDoc.hidden = !study.docId;
+  const inDoc = !!study.docId;
+  ui.studyHome.hidden = inDoc || study.subject !== null;
+  ui.studyLib.hidden = inDoc || study.subject === null;
+  ui.studyDoc.hidden = !inDoc;
   if (study.docId && !study.doc && study.loading !== study.docId) openDoc(study.docId);
 }
+
+function openSubject(id) {
+  setSubject(id);
+  ui.studyNote.textContent = "";
+  ui.studyAddBox.open = subjectDocs(id).length === 0; // lớp trống: mở sẵn ô thêm tài liệu
+  renderDocList();
+  renderStudyView();
+  scrollTo(0, 0);
+}
+
+function closeSubject() {
+  setSubject(null);
+  renderDocList();
+  renderStudyView();
+}
+
+async function addSubject(name) {
+  ui.subjectNote.textContent = "";
+  try {
+    const sub = await studyApi("/subjects", "POST", { name });
+    study.subjects.push(sub);
+    renderDocList();
+    return sub;
+  } catch (e) {
+    ui.subjectNote.textContent = e.message;
+    return null;
+  }
+}
+
+async function renameSubject(s) {
+  const name = prompt("Tên mới cho lớp", s.name)?.trim();
+  if (!name || name === s.name) return;
+  try {
+    const sub = await studyApi(`/subjects/${encodeURIComponent(s.id)}`, "PATCH", { name });
+    // theo id: sau khi sắp xếp, study.subjects là object mới từ server, s có thể là object cũ
+    study.subjects = study.subjects.map((x) => (x.id === sub.id ? sub : x));
+  } catch (e) {
+    ui.subjectNote.textContent = e.message;
+  }
+  renderDocList();
+}
+
+async function deleteSubject(s) {
+  const n = subjectDocs(s.id).length;
+  const what = n ? ` ${n} tài liệu trong lớp chuyển sang "Chưa xếp lớp", không bị xoá.` : "";
+  if (!confirm(`Xoá lớp "${s.name}"?${what}`)) return;
+  try {
+    await studyApi(`/subjects/${encodeURIComponent(s.id)}`, "DELETE");
+  } catch (e) {
+    if (e.status !== 404) return void (ui.subjectNote.textContent = e.message);
+  }
+  if (study.subject === s.id) setSubject(null);
+  loadDocs(); // tài liệu trong lớp đã đổi subject
+}
+
+// Hộp chọn lớp để chuyển một bài: các lớp, "Chưa xếp lớp", hoặc tạo lớp mới rồi chuyển vào
+function moveDoc(d) {
+  const here = d.subject ?? "";
+  ui.moveTitle.textContent = `Chuyển "${d.title}" sang lớp`;
+  const targets = [...study.subjects.map((s) => [s.id, s.name]), ...(here ? [["", "Chưa xếp lớp"]] : [])];
+  ui.moveList.replaceChildren(...targets.map(([id, name]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "secondary";
+    b.textContent = id === here ? `${name} (đang ở đây)` : name;
+    b.disabled = id === here;
+    b.onclick = () => moveDocTo(d, id);
+    return b;
+  }));
+  ui.moveNew.onclick = async () => {
+    const name = prompt("Tên lớp mới")?.trim();
+    if (!name) return;
+    const sub = await addSubject(name);
+    if (sub) moveDocTo(d, sub.id);
+    else alert(ui.subjectNote.textContent);
+  };
+  ui.moveDlg.showModal();
+}
+
+async function moveDocTo(d, subject) {
+  ui.moveDlg.close();
+  try {
+    await studyApi(`/${encodeURIComponent(d.id)}`, "PATCH", { subject: subject || null });
+  } catch (e) {
+    alert(e.message);
+  }
+  loadDocs(); // server xếp bài vừa chuyển lên đầu lớp mới (khi đã sắp xếp tay)
+}
+
+ui.moveCancel.onclick = () => ui.moveDlg.close();
+ui.moveDlg.addEventListener("click", (e) => {
+  if (e.target === ui.moveDlg) ui.moveDlg.close(); // bấm ra ngoài hộp
+});
+ui.libBack.onclick = closeSubject;
+ui.subjectForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = ui.subjectName.value.trim();
+  if (!name) return void (ui.subjectNote.textContent = "Nhập tên lớp trước đã.");
+  if (await addSubject(name)) ui.subjectName.value = "";
+});
+
 
 // Câu trả lời của gia sư đang chạy thì dừng trước khi đổi tài liệu, để không viết vào khung chat đã xoá
 function stopStudyAnswer() {
@@ -1760,6 +2029,8 @@ async function openDoc(id, start = false) {
 
 function closeDoc() {
   stopStudyAnswer();
+  const d = study.docs.find((x) => x.id === study.docId);
+  if (d) setSubject(d.subject ?? ""); // về lớp của bài vừa học (kể cả khi mở thẳng bài nhớ từ lần trước)
   study.docId = study.doc = study.loading = null;
   localStorage.removeItem("studyDoc");
   ui.studyChat.replaceChildren();
@@ -1801,8 +2072,11 @@ function renderStudyDoc() {
 // Server báo tiến độ / session mới của một tài liệu (sau dòng [Phần k/N] và khi lượt trả lời xong)
 function onStudyDoc(doc) {
   const i = study.docs.findIndex((d) => d.id === doc.id);
-  if (i >= 0) study.docs.splice(i, 1);
-  study.docs.unshift(doc); // vừa học: lên đầu như thứ tự server (updated mới nhất)
+  if (study.manual && i >= 0) study.docs[i] = doc; // đã sắp xếp tay: giữ chỗ như server
+  else {
+    if (i >= 0) study.docs.splice(i, 1);
+    study.docs.unshift(doc); // vừa học: lên đầu như thứ tự server (updated mới nhất)
+  }
   if (study.doc?.id === doc.id) {
     Object.assign(study.doc, doc);
     renderStudyDoc();
@@ -1815,9 +2089,10 @@ async function createDoc(body) {
   ui.studyAdd.disabled = true;
   ui.studyFile.parentElement.classList.add("busy");
   try {
-    const doc = await studyApi("", "POST", body);
+    const doc = await studyApi("", "POST", { ...body, subject: study.subject || null }); // thêm vào lớp đang mở
     ui.studyTitle.value = ui.studyText.value = "";
     ui.studyNote.textContent = "";
+    ui.studyAddBox.open = false;
     study.docs.unshift(doc);
     renderDocList();
     openDoc(doc.id, true); // tài liệu mới: Mimi đọc và giảng phần 1 luôn
@@ -1844,7 +2119,7 @@ async function renameDoc(d) {
   try {
     onStudyDoc(await studyApi(`/${encodeURIComponent(d.id)}`, "PATCH", { title }));
   } catch (e) {
-    ui.studyNote.textContent = e.message;
+    alert(e.message); // ô ghi chú nằm trong khung thêm tài liệu, có thể đang đóng
   }
 }
 
@@ -1853,7 +2128,7 @@ async function deleteDoc(d) {
   try {
     await studyApi(`/${encodeURIComponent(d.id)}`, "DELETE");
   } catch (e) {
-    if (e.status !== 404) return void (ui.studyNote.textContent = e.message);
+    if (e.status !== 404) return void alert(e.message);
   }
   study.docs = study.docs.filter((x) => x.id !== d.id);
   if (study.docId === d.id) closeDoc();
