@@ -39,9 +39,12 @@ class Config:
     tts_device: str = "cuda"
     tts_threads: int = 4
     tts_loanwords: bool = False
+    tts_pause_scale: float = 1.0      # nhân khoảng nghỉ giữa câu/đoạn (normalize.PAUSES), 0 = như model tự sinh
     tts_first_chunk_frames: int = 1   # 1 frame = 80ms audio
     tts_max_chunk_frames: int = 16
     tts_cuda_graph: bool = True       # CUDA Graph cho local_frame_decode, đỡ giật khi CPU bận (zerotts_gpu.py)
+    tts_temperature: float = 0.8      # audio_temperature của ZeroTTS; thấp thì giọng đều hơn giữa các câu
+    tts_cfg_scale: float = 1.0        # > 1: bám chất giọng mẫu hơn, tốn gấp đôi
     # Bridge tới Claude: mặc định "none" để test không gọi Claude; config.toml chọn claude_cli/clipboard
     bridge_kind: str = "none"
     bridge_auto_ask: bool = True  # transcript xong thì tự hỏi Claude

@@ -124,7 +124,7 @@ def speak(ws, text: str, sample_rate: int, stop_after: float | None = None) -> d
         elif msg["type"] == "speak_more" and msg["speak_id"] == speak_id:
             n_sent += len(msg["sentences"])
         elif msg["type"] == "speak_sentence" and msg["speak_id"] == speak_id and msg["index"] > 0:
-            pending_gap = SENTENCE_GAP_S
+            pending_gap = msg.get("pause_ms", SENTENCE_GAP_S * 1000) / 1000
             new_sentence = True
         elif msg["type"] == "speak_end" and msg["speak_id"] == speak_id:
             return {"first_ms": round(first * 1000) if first is not None else None,

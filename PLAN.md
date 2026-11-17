@@ -222,6 +222,7 @@ AI-assistent/
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
 - [ ] ~~Fine-tune STT~~ → chuyển sang Phase 8 (tự học dài hạn), làm khi đủ audio đã sửa
 - [ ] Chỉnh tốc độ đọc, nút "đọc lại", "đọc chậm"
+- [ ] **Giọng đọc như người giảng bài (17/11/2026):** trước đây mọi câu cách nhau cố định ~330ms (150ms web + ~180ms lặng sẵn của ZeroTTS), mất ranh giới đoạn, câu đầu bị cắt ở dấu phẩy. Đã làm: nghỉ theo dấu câu (phẩy để model tự ngắt, chấm +300ms, hỏi +500ms, chuyển đoạn +700ms, lệch ±15%; `normalize.PAUSES`, `[tts] pause_scale`, gửi qua `speak_sentence.pause_ms`), giữ dòng trống làm chuyển đoạn, không cắt câu đầu; prompt `voice_reply.md` / `study_reply.md` viết theo giọng giảng (từ nối, mỗi ý một đoạn, câu hỏi dẫn, nhấn ý bằng cách đặt từ khoá cuối câu). Giọng lệch giữa các câu (ZeroTTS lấy mẫu mỗi câu độc lập): tạm dùng `[tts] cfg_scale = 1.5`, độ to nhảy giữa hai câu 2.3 → 1.4 dB, độ hơi lệch giảm ~25%, cao độ gần như không đổi (`bench/tts_consistency.py`); GPU vẫn đạt DoD (tiếng đầu p50 128ms, RTF 0.68, 0 giật) nhưng mất CUDA Graph, chưa đo lúc máy bận. Người dùng: "tạm chấp nhận", giải pháp thật là đổi model (Phase 10). Còn: nghe A/B (`bench/tts_render.py`), đo nhịp bài giảng thật để thay số tạm (`bench/lecture_prosody.py`), thử giọng clone theo phong cách giảng (Phase 6). Nghiên cứu: `_local/tts_prosody_research.md`
 - [x] Script khởi động 1 lệnh (server + mở web): `start.bat` = `python -m server --open`; server đã chạy thì chỉ mở trình duyệt (18/10/2026, chưa bấm đúp thử)
 
 ### DoD
@@ -362,6 +363,25 @@ AI-assistent/
 - [ ] Từ lúc nói xong đến lúc yêu cầu vào ô chat ≤ **10s** khi VS Code chưa mở
 - [ ] Không gửi Enter nhầm cửa sổ: cửa sổ trên cùng không phải VS Code đúng dự án thì chỉ điền sẵn và nhắc người dùng
 
+## Phase 10 — Tách service, đổi nguồn TTS/STT/AI dễ dàng
+
+**Mục tiêu:** STT, TTS, AI (bridge) và phần điều phối (BE) tách thành các service có interface chung, đổi model chỉ bằng config, thử model mới (VieNeu, OmniVoice, giọng tự build...) mà không sửa server. Lý do (17/11/2026): ZeroTTS chỉ "tạm chấp nhận" (giọng lệch giữa các câu, không có ngữ cảnh câu trước), cần thử model khác trên đúng luồng thật.
+
+> Hiện trạng: TTS đã có interface ngầm (`sample_rate`, `stream(text, lang)`, `voices()`) và `tts_factory` trong `create_app`, nhưng (1) VieNeu/OmniVoice phải ở venv riêng nên không nạp được vào tiến trình server; (2) nhiều giả định của ZeroTTS rò ra ngoài: lặng sẵn ~180ms trong `PAUSES`, chunking, `temperature`/`cfg_scale`, `[tts]` phẳng; (3) `bench/tts_bench.py` chép adapter riêng thay vì dùng chung; (4) `app.py` ~750 dòng trộn WebSocket, điều phối lượt nói, vòng đọc TTS, rảnh tay, giao việc, học bài.
+
+### TODO
+- [ ] Interface `TtsEngine` chung (`server/tts/engines/`): `sample_rate`, `voices()`, `stream(text, lang)`, khả năng (`streaming`, `native_pause_ms`, `normalizes_text`, `voice_clone`); registry theo tên, `[tts] engine = "zerotts"` + bảng `[tts.zerotts]` cho tham số riêng
+- [ ] TTS worker ngoài tiến trình: `python -m server.tts.worker --engine vieneu` chạy trong venv của model, stream PCM qua WebSocket/HTTP; `RemoteTtsEngine` trong server nối tới worker, đổi model = đổi config, không khởi động lại server chính
+- [ ] `bench/tts_bench.py`, `tts_consistency.py`, `tts_render.py` dùng chung registry, so mọi model bằng cùng thước đo (độ trễ, giật, độ đều giọng, WER khi cho Whisper nghe lại)
+- [ ] Làm tương tự cho STT (`SttService`) và AI (`Bridge` đã có interface): cấu hình chọn nguồn, test bằng engine giả như hiện nay
+- [ ] Tách `app.py`: lớp WebSocket/protocol, lớp điều phối lượt nói (STT → route → bridge → feeder → TTS), các tính năng (rảnh tay, giao việc, học bài) gọi qua interface
+- [ ] Thử VieNeu v3 Turbo và OmniVoice trên luồng thật, chọn theo số đo
+
+### DoD
+- [ ] Đổi TTS giữa ZeroTTS và ít nhất một model khác chỉ bằng `server/config.toml`, không sửa code
+- [ ] Model ở venv riêng chạy được qua worker, tiếng đầu vẫn ≤ 1.5s
+- [ ] Toàn bộ test hiện có vẫn qua; bench TTS không còn adapter chép riêng
+
 ---
 
 ## Theo dõi tiến độ
@@ -378,3 +398,4 @@ AI-assistent/
 | 7 | Dùng từ mọi thiết bị | 🟡 18/10/2026 — dùng được trong LAN qua HTTPS 8766, có PWA + giữ màn hình sáng; từ xa (4G) chưa làm |
 | 8 | Tự học dài hạn | 🟡 01/11/2026 — có kế hoạch (thêm D: hiểu ý giao việc); D: nút Sai dự án, trả lời "ừ / cái thứ hai / sai rồi", ghi nhãn intents; lexicon thêm TODO, README, PLAN.md… |
 | 9 | Giao việc cho VS Code | 🟡 01/11/2026 — A1 + A2 + giao việc bằng giọng nói code xong (T-011); thử thật lần 1: sửa cắt tên, lọc câu ảo giác, hỏi lại khi "mở X" không rõ |
+| 10 | Tách service, đổi nguồn TTS/STT/AI | ⬜ 17/11/2026 — đã lên kế hoạch; ZeroTTS tạm dùng cfg_scale 1.5 |

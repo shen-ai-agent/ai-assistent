@@ -160,8 +160,9 @@ def speak_more(speak_id: int, sentences: list[dict]) -> dict:
     return {"type": "speak_more", "speak_id": speak_id, "sentences": sentences}
 
 
-def speak_sentence(speak_id: int, index: int) -> dict:
-    return {"type": "speak_sentence", "speak_id": speak_id, "index": index}
+def speak_sentence(speak_id: int, index: int, pause_ms: int = 0) -> dict:
+    """pause_ms: client chèn khoảng lặng này trước tiếng của câu (dấu câu, chuyển đoạn; normalize.pause_ms)."""
+    return {"type": "speak_sentence", "speak_id": speak_id, "index": index, "pause_ms": pause_ms}
 
 
 def speak_end(speak_id: int, cancelled: bool, ttfa_ms: int | None, synth_ms: int, audio_ms: int) -> dict:

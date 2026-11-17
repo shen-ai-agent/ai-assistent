@@ -1,8 +1,9 @@
 """Biến câu trả lời của Claude thành text đọc được cho TTS.
 
-  clean_structure   cắt phần sau ---CODE---, code block, markdown, link, URL, đường dẫn (cả đoạn)
+  clean_structure   cắt phần sau ---CODE---, code block, markdown, link, URL, đường dẫn (cả đoạn), giữ ranh giới đoạn
   split_sentences   tách câu (splitter.py)
   speakable         từng câu: viết tắt, lexicon, số, ký hiệu
+  pause_ms          khoảng nghỉ trước câu sau, theo dấu kết câu, đổi ngôn ngữ, chuyển đoạn
 
 Lexicon chạy trước bước đọc số; nếu không, "EC2" sẽ thành "E C hai" trước khi kịp tra lexicon.
 Câu tiếng Anh hoàn toàn giữ số và thuật ngữ cho model đọc theo kiểu tiếng Anh.
@@ -11,6 +12,7 @@ Câu tiếng Anh hoàn toàn giữ số và thuật ngữ cho model đọc theo 
 from __future__ import annotations
 
 import re
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -52,6 +54,39 @@ class Segment:
     text: str   # đã chuẩn hoá, đưa thẳng vào TTS
     lang: str   # "vi" | "en"
     source: str = ""  # câu trước khi chuẩn hoá (đã bỏ markdown), để hiển thị
+    pause_ms: int = 0  # nghỉ bao lâu sau câu này, trước câu kế tiếp (web chèn khoảng lặng)
+
+
+# ---------------------------------------------------------------- ngắt nghỉ
+
+# Khoảng lặng chèn thêm sau mỗi câu (ms). Mỗi câu ZeroTTS sinh ra đã có sẵn ~150–200ms lặng ở hai đầu
+# (_local/tts_gap_probe.py), nên khoảng nghỉ nghe được = số dưới đây + ~180ms.
+# Dấu phẩy để model tự ngắt bên trong câu (~150–300ms, _local/tts_comma_probe.py): cắt câu ở dấu phẩy thì
+# nửa đầu hạ giọng như đã hết câu. Vì vậy phẩy luôn ngắn hơn chấm. Số tạm theo tài liệu
+# (_local/tts_prosody_research.md), sẽ thay bằng số đo từ bài giảng thật.
+PAUSES = {"comma": 0, "colon": 250, "sentence": 300, "lang": 350, "question": 500, "para": 700}
+# Người thật không nghỉ đều tăm tắp; khoảng nghỉ cố định nghe máy móc
+JITTER = 0.15
+_PARA_BREAK = re.compile(r"\n[ \t]*\n")
+
+
+def pause_ms(kind: str, key: str = "", scale: float = 1.0) -> int:
+    """Khoảng nghỉ loại kind, lệch ±JITTER theo key (không random, để test lặp lại được)."""
+    base = PAUSES[kind] * scale
+    if base <= 0:
+        return 0
+    r = zlib.crc32(key.encode("utf-8")) / 0xFFFFFFFF * 2 - 1
+    return round(base * (1 + JITTER * r))
+
+
+def _ending_kind(sentence: str) -> str:
+    return {"?": "question", ":": "colon", ",": "comma"}.get(sentence.rstrip()[-1:], "sentence")
+
+
+def para_break(before: str, after: str) -> bool:
+    """Chỗ nối hai mẩu text (feeder cắt ở xuống dòng) có phải một dòng trống, tức chuyển đoạn, không."""
+    seam = re.search(r"\s*$", before)[0] + re.match(r"\s*", after)[0]
+    return bool(_PARA_BREAK.search(seam))
 
 
 # ---------------------------------------------------------------- lexicon
@@ -127,7 +162,10 @@ def _table_row(line: str) -> str:
 
 
 def clean_structure(text: str) -> str:
-    """Bỏ phần không đọc được (code, markdown, URL). Trả về văn xuôi, mỗi dòng cũ thành một câu."""
+    """Bỏ phần không đọc được (code, markdown, URL). Trả về văn xuôi, mỗi dòng cũ thành một câu.
+
+    Dòng trống hoặc đường kẻ ngang là chuyển đoạn: các đoạn cách nhau bằng "\\n\\n" để nghỉ dài hơn.
+    """
     text = text.split(CODE_MARKER, 1)[0]
     text = re.sub(r"```.*?(?:```|$)", f"\n{CODE_SPOKEN}.\n", text, flags=re.S)
     text = re.sub(r"`([^`\n]+)`", _inline_code, text)
@@ -138,12 +176,14 @@ def clean_structure(text: str) -> str:
     text = re.sub(r"(?<![\w])[A-Za-z]:\\[^\s,;]*", "đường dẫn", text)  # C:\Users\...
     text = re.sub(r"(?<![\w.~])(?:~|\.{1,2})?(?:/[\w.@-]+){2,}/?", "đường dẫn", text)  # /etc/nginx/x.conf
 
-    lines = []
+    paras: list[list[str]] = [[]]
     for line in text.splitlines():
         s = line.strip()
-        if not s or re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?", s):  # dòng kẻ của bảng
+        if not s or re.fullmatch(r"([-*_]\s*){3,}", s):               # dòng trống, đường kẻ ngang: hết đoạn
+            if paras[-1]:
+                paras.append([])
             continue
-        if re.fullmatch(r"([-*_]\s*){3,}", s):                        # đường kẻ ngang
+        if re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?", s):  # dòng kẻ của bảng
             continue
         if s.startswith("|") and s.endswith("|"):
             s = _table_row(s)
@@ -158,8 +198,8 @@ def clean_structure(text: str) -> str:
         if s and not re.search(r"[.!?;:…]$", s):
             s += "."  # xuống dòng là một chỗ ngắt
         if s:
-            lines.append(s)
-    return " ".join(lines)
+            paras[-1].append(s)
+    return "\n\n".join(" ".join(p) for p in paras if p)
 
 
 # ---------------------------------------------------------------- từng câu
@@ -288,12 +328,33 @@ def _split_lang(sents: list[str]) -> list[str]:
     return out
 
 
-def prepare(text: str, lexicon: Lexicon | None = None, **opts) -> list[Segment]:
-    """Câu trả lời → danh sách câu đọc được, theo thứ tự, kèm ngôn ngữ."""
-    out = []
-    for sent in _split_lang(split_sentences(clean_structure(text), key=detect_lang)):
-        lang = detect_lang(sent)
-        spoken = speakable(sent, lang, lexicon, **opts)
-        if re.search(r"\w", spoken):
-            out.append(Segment(spoken, lang, sent))
+def prepare(text: str, lexicon: Lexicon | None = None, *, pause_scale: float = 1.0, **opts) -> list[Segment]:
+    """Câu trả lời → danh sách câu đọc được, theo thứ tự, kèm ngôn ngữ và khoảng nghỉ sau mỗi câu.
+
+    Câu cuối: text kết thúc bằng dòng trống thì nghỉ như chuyển đoạn; mẩu sau bắt đầu bằng dòng trống thì
+    người gọi tự kiểm bằng para_break (feeder có thể cắt đúng giữa hai dấu xuống dòng).
+    pause_scale: nhân mọi khoảng nghỉ, 0 = chỉ còn khoảng lặng sẵn có của model.
+    """
+    out: list[Segment] = []
+    para_ends: set[int] = set()
+    for para in clean_structure(text).split("\n\n"):
+        # Không cắt câu đầu ở dấu phẩy (first_max=0): nửa câu bị cắt hạ giọng như hết câu. TTFA trên GPU
+        # ~80ms dù câu dài, nên không cần câu đầu ngắn.
+        for sent in _split_lang(split_sentences(para, key=detect_lang, first_max=0)):
+            lang = detect_lang(sent)
+            spoken = speakable(sent, lang, lexicon, **opts)
+            if re.search(r"\w", spoken):
+                out.append(Segment(spoken, lang, sent))
+        if out:
+            para_ends.add(len(out) - 1)
+
+    ends_with_para = bool(re.search(r"\n[ \t]*\n\s*$", text.split(CODE_MARKER, 1)[0]))
+    for i, seg in enumerate(out):
+        nxt = out[i + 1] if i + 1 < len(out) else None
+        kinds = [_ending_kind(seg.source)]
+        if (nxt is not None and i in para_ends) or (nxt is None and ends_with_para):
+            kinds.append("para")
+        if nxt is not None and nxt.lang != seg.lang or seg.lang == "en":
+            kinds.append("lang")  # câu tiếng Anh (câu mẫu) tách bạch với lời giảng
+        seg.pause_ms = max(pause_ms(k, seg.source, pause_scale) for k in kinds)
     return out

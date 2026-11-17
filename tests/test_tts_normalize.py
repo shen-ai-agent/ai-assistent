@@ -2,7 +2,8 @@
 
 import pytest
 
-from server.tts.normalize import Lexicon, clean_structure, detect_lang, prepare, speakable
+from server.tts.normalize import (JITTER, PAUSES, Lexicon, clean_structure, detect_lang, para_break, pause_ms,
+                                  prepare, speakable)
 from server.tts.numbers import read_decimal, read_int, read_version
 from server.tts.splitter import split_sentences
 
@@ -218,3 +219,50 @@ def test_url_port():
 
 def test_abbrev_at_sentence_end_keeps_period():
     assert "vân vân. Bạn" in say("EC2, S3 v.v. Bạn nhớ nhé.")
+
+
+# ---------- ngắt nghỉ ----------
+
+def test_pause_by_punctuation():
+    segs = prepare("Lambda là dịch vụ chạy code không cần máy chủ. Vậy khi nào nên dùng nó? "
+                   "Khi tải lên xuống thất thường thì dùng Lambda.")
+    sent, question, last = (s.pause_ms for s in segs)
+    assert 200 < sent < question  # câu hỏi tu từ nghỉ lâu hơn câu thường
+    assert last == pytest.approx(PAUSES["sentence"], rel=JITTER)
+
+
+def test_pause_comma_shorter_than_period():
+    long = "Khi thiết kế hệ thống trên AWS bạn cần nghĩ tới tính sẵn sàng cao, " * 4 + "và chi phí."
+    segs = prepare(long + " Câu sau cũng khá là dài một chút nhé.")
+    cut = [s for s in segs if s.source.endswith(",")]
+    assert cut and all(s.pause_ms < segs[-2].pause_ms for s in cut)
+
+
+def test_paragraph_break_kept_and_longer():
+    text = "Đoạn một nói về EC2 nhé bạn.\n\nĐoạn hai nói về S3 bucket nhé.\nDòng này cùng đoạn hai."
+    assert clean_structure(text).count("\n\n") == 1
+    first, second, third = prepare(text)
+    assert first.pause_ms > PAUSES["sentence"] * (1 + JITTER) and second.pause_ms < first.pause_ms
+
+
+def test_paragraph_at_end_and_seam():
+    assert prepare("Hết đoạn này rồi đấy bạn ơi.\n\n")[-1].pause_ms >= PAUSES["para"] * (1 - JITTER)
+    assert para_break("Câu một.\n", "\nCâu hai.") and para_break("Câu một.", "\n\nCâu hai.")
+    assert not para_break("Câu một.\n", "Câu hai.")
+
+
+def test_first_sentence_not_cut_in_prepare():
+    text = ("Khi thiết kế hệ thống trên AWS bạn cần nghĩ tới tính sẵn sàng cao, "
+            "chi phí vận hành hằng tháng và khả năng mở rộng khi lượng người dùng tăng đột biến.")
+    assert len(prepare(text)) == 1
+
+
+def test_pause_around_english_and_scale():
+    segs = prepare("Câu mẫu Part 2 có thể là: I have been working as a developer for 3 years. Rất tự nhiên đúng không?")
+    assert segs[0].pause_ms >= PAUSES["lang"] * (1 - JITTER) and segs[1].pause_ms >= PAUSES["lang"] * (1 - JITTER)
+    assert all(s.pause_ms == 0 for s in prepare("Một câu dài vừa đủ. Thêm câu nữa nhé bạn?", pause_scale=0))
+
+
+def test_pause_jitter_varies_but_deterministic():
+    a = [pause_ms("sentence", k) for k in ("một", "hai", "ba", "bốn")]
+    assert len(set(a)) > 1 and a == [pause_ms("sentence", k) for k in ("một", "hai", "ba", "bốn")]

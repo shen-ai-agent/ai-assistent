@@ -50,7 +50,8 @@ def _zerotts_engine(cfg: Config):
     from .tts.synth import ZeroTtsEngine  # import muộn: test không cần model
     return ZeroTtsEngine(cfg.tts_voice, cfg.tts_device, cfg.tts_threads,
                          first_chunk_frames=cfg.tts_first_chunk_frames, max_chunk_frames=cfg.tts_max_chunk_frames,
-                         cuda_graph=cfg.tts_cuda_graph)
+                         cuda_graph=cfg.tts_cuda_graph, temperature=cfg.tts_temperature,
+                         cfg_scale=cfg.tts_cfg_scale)
 
 
 def _silero_session():
@@ -122,7 +123,8 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         app.state.tts_lock = asyncio.Lock()
         if cfg.tts_enabled:
             log.info("Đang load TTS (giọng %s)...", cfg.tts_voice)
-            tts = TtsService(await asyncio.to_thread(tts_factory, cfg), loanwords=cfg.tts_loanwords)
+            tts = TtsService(await asyncio.to_thread(tts_factory, cfg), loanwords=cfg.tts_loanwords,
+                             pause_scale=cfg.tts_pause_scale)
             # Warm-up: lần chạy đầu của onnxruntime CUDA chậm (cấp phát, chọn kernel)
             await asyncio.to_thread(lambda: [c for seg in tts.plan("Xin chào bạn.") for c in tts.stream(seg)])
             log.info("TTS sẵn sàng (CUDA Graph: %s)", "bật" if getattr(tts.engine, "cuda_graph", False) else "tắt")
@@ -675,9 +677,12 @@ class Session:
         """Đọc từng câu, gửi từng mẩu audio ngay khi có. Bị huỷ (speak_stop, speak mới) thì speak_end cancelled."""
         t0 = time.perf_counter()
         ttfa_ms, n_samples, cancelled, index = None, 0, False, 0
+        pause, tail = 0, ""  # nghỉ trước câu kế tiếp (theo câu vừa đọc); đuôi mẩu text trước, để thấy chuyển đoạn
         await self.send(P.speak_start(speak_id))
         try:
             while (text := await queue.get()) is not None:
+                pause = max(pause, self.tts.seam_pause(tail, text))
+                tail = (tail + text)[-16:]
                 segs = await asyncio.to_thread(self.tts.plan, text)
                 if not segs:
                     continue
@@ -685,7 +690,9 @@ class Session:
                                                         for s in segs]))
                 for seg in segs:
                     async with self.tts_lock:  # khoá theo câu: tab khác chen được giữa hai câu
-                        await self.send(P.speak_sentence(speak_id, index))
+                        # Khoảng nghỉ do web chèn theo lịch phát, không gửi byte lặng
+                        await self.send(P.speak_sentence(speak_id, index, pause if index else 0))
+                        pause = seg.pause_ms
                         index += 1
                         it = self.tts.stream(seg)
                         try:

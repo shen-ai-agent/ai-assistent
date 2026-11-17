@@ -12,7 +12,7 @@ from typing import Iterator
 import numpy as np
 
 from ..stt.service import _Watched
-from .normalize import LEXICON_PATH, Lexicon, Segment, prepare
+from .normalize import LEXICON_PATH, Lexicon, Segment, para_break, pause_ms, prepare
 
 log = logging.getLogger("tts")
 
@@ -22,7 +22,7 @@ class ZeroTtsEngine:
 
     def __init__(self, voice: str = "maichi", device: str = "cuda", threads: int = 4,
                  first_chunk_frames: int = 1, max_chunk_frames: int = 16, gpu_state: bool = True,
-                 cuda_graph: bool = True):
+                 cuda_graph: bool = True, temperature: float = 0.8, cfg_scale: float = 1.0):
         providers = ["CPUExecutionProvider"]
         if device == "cuda":
             # onnxruntime-gpu dùng cuDNN/cuBLAS có sẵn trong torch/lib; phải nạp torch trước khi tạo session
@@ -40,6 +40,9 @@ class ZeroTtsEngine:
         self.sample_rate = self.tts.sample_rate
         self.voice = voice
         self.chunking = dict(first_chunk_frames=first_chunk_frames, max_chunk_frames=max_chunk_frames)
+        # Mỗi câu lấy mẫu độc lập: temperature thấp thì cao độ/độ hơi ít trôi giữa các câu; cfg_scale > 1 kéo về
+        # đúng chất giọng mẫu nhưng tốn gấp đôi mỗi frame và không chạy CUDA Graph (bench/tts_consistency.py)
+        self.sampling = dict(audio_temperature=temperature, cfg_scale=cfg_scale)
         self.provider = self.tts.prefix_step_sess.get_providers()[0]
         if device == "cuda" and self.provider != "CUDAExecutionProvider":
             # onnxruntime-gpu sai bản CUDA (vd 1.31 cần CUDA 13) thì tự rơi về CPU mà không báo lỗi
@@ -51,16 +54,17 @@ class ZeroTtsEngine:
 
     def stream(self, text: str, lang: str) -> Iterator[np.ndarray]:
         """Một câu → các mẩu float32 1-D. Mẩu đầu rất ngắn (~80ms audio) để có tiếng sớm."""
-        for chunk in self.tts.synthesize_stream(text, voice=self.voice, **self.chunking):
+        for chunk in self.tts.synthesize_stream(text, voice=self.voice, **self.chunking, **self.sampling):
             yield np.asarray(chunk, dtype=np.float32).reshape(-1)
 
 
 class TtsService:
     """Chuẩn hoá + tổng hợp. Tự đọc lại lexicon khi file đổi, giống glossary của STT."""
 
-    def __init__(self, engine, *, lexicon_path: Path = LEXICON_PATH, loanwords: bool = False):
+    def __init__(self, engine, *, lexicon_path: Path = LEXICON_PATH, loanwords: bool = False, pause_scale: float = 1.0):
         self.engine = engine
         self.loanwords = loanwords
+        self.pause_scale = pause_scale
         self._lexicon = _Watched(lexicon_path, Lexicon.load)
 
     @property
@@ -68,7 +72,11 @@ class TtsService:
         return self.engine.sample_rate
 
     def plan(self, text: str) -> list[Segment]:
-        return prepare(text, self._lexicon.get(), loanwords=self.loanwords)
+        return prepare(text, self._lexicon.get(), loanwords=self.loanwords, pause_scale=self.pause_scale)
+
+    def seam_pause(self, before: str, after: str) -> int:
+        """Mẩu text sau bắt đầu ở đoạn mới (dòng trống nằm giữa hai mẩu feeder cắt ra): nghỉ như chuyển đoạn."""
+        return pause_ms("para", after, self.pause_scale) if para_break(before, after) else 0
 
     def stream(self, seg: Segment) -> Iterator[np.ndarray]:
         return self.engine.stream(seg.text, seg.lang)

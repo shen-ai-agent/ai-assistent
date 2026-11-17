@@ -7,7 +7,7 @@ import { MindMap } from "./mindmap.js";
 const PREROLL_FRAMES = 3;            // 300ms trước lúc bấm, để không mất đầu câu
 const BACKOFF_MS = [1000, 2000, 5000];
 const AUDIO_OPTS = ["echoCancellation", "noiseSuppression", "autoGainControl"];
-const SENTENCE_GAP_S = 0.15;          // khoảng lặng giữa hai câu, giống tts_bench
+const SENTENCE_GAP_S = 0.15;          // khoảng lặng giữa hai câu khi server không gửi pause_ms (server cũ)
 const PLAY_LEAD_S = 0.05;             // lùi lịch phát mẩu đầu một chút để mẩu sau kịp tới
 // Máy bận thì TTS có lúc chậm hơn tiếng phát: hụt giữa câu thì đệm thêm (0.4 → 0.8 → 1.6s) trước khi phát tiếp,
 // một lần ngừng ngắn thay cho giật liên tục. Đệm giữ sang lượt đọc sau, giảm một nửa mỗi lượt.
@@ -786,7 +786,7 @@ ui.mimiStop.onclick = () => stopSpeaking();
 // giữa câu. lead = đệm hiện tại (REBUFFER_S).
 // replayNext: bong bóng vừa bấm Nghe lại, chờ speak_start; replay: bong bóng đang được đọc lại.
 const player = { tts: null, ctx: null, analyser: null, id: -1, active: false, ended: false, sources: new Set(), nextTime: 0,
-  pendingGap: 0, clickedAt: 0, firstAudioMs: null, maxGapS: 0, underruns: 0, lead: PLAY_LEAD_S, items: [],
+  pendingGap: 0, atSentence: false, clickedAt: 0, firstAudioMs: null, maxGapS: 0, underruns: 0, lead: PLAY_LEAD_S, items: [],
   replayNext: null, replay: null };
 
 function ensurePlayer() {
@@ -840,6 +840,7 @@ function onSpeakStart(msg) {
   player.ended = false;
   player.nextTime = 0;
   player.pendingGap = 0;
+  player.atSentence = false;
   player.firstAudioMs = null;
   player.maxGapS = 0;
   player.underruns = 0;
@@ -876,7 +877,11 @@ function onSpeakMore(msg) {
 
 function onSpeakSentence(msg) {
   if (msg.speak_id !== player.id) return;
-  if (msg.index > 0) player.pendingGap = SENTENCE_GAP_S;
+  // Nghỉ trước câu: server tính theo dấu câu / chuyển đoạn (phẩy ngắn hơn chấm, câu hỏi và sang đoạn dài hơn)
+  if (msg.index > 0) {
+    player.pendingGap = msg.pause_ms != null ? msg.pause_ms / 1000 : SENTENCE_GAP_S;
+    player.atSentence = true;
+  }
   // Server báo lúc bắt đầu tổng hợp câu; tô câu đó khi tiếng của nó thật sự phát
   const li = player.items[msg.index];
   const delay = Math.max(0, player.nextTime + player.pendingGap - player.ctx.currentTime);
@@ -912,7 +917,7 @@ function onAudio(buf) {
     const due = player.nextTime + player.pendingGap;
     start = due;
     if (due < now) { // hụt: hết audio trước khi mẩu này tới
-      if (!player.pendingGap) { // giữa câu: TTS đang chậm hơn tiếng phát, đệm nhiều hơn
+      if (!player.atSentence) { // giữa câu: TTS đang chậm hơn tiếng phát, đệm nhiều hơn
         player.underruns++;
         player.lead = Math.min(MAX_LEAD_S, Math.max(REBUFFER_S, player.lead * 2));
       }
@@ -921,6 +926,7 @@ function onAudio(buf) {
     }
   }
   player.pendingGap = 0;
+  player.atSentence = false;
 
   const src = player.ctx.createBufferSource();
   src.buffer = audio;

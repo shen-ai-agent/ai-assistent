@@ -27,9 +27,12 @@ voice = "maichi"          # baotrang giahuy hamy huuduc kimoanh maichi quangminh
 device = "cuda"           # cần onnxruntime-gpu 1.23.2 (xem README); "cpu" thì RTF ~1, dễ khựng
 threads = 4
 loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
+pause_scale = 1.0         # nhân khoảng nghỉ sau câu/câu hỏi/chuyển đoạn (normalize.PAUSES); 0 = chỉ còn lặng sẵn của model
 first_chunk_frames = 2    # mẩu 160ms từ đầu: không giật ở bench không STT (_local/tts_chunk)
 max_chunk_frames = 2
 cuda_graph = true         # local_frame_decode chạy CUDA Graph: bớt việc CPU, audio trùng bản gốc (server/tts/zerotts_gpu.py)
+temperature = 0.8         # audio_temperature: thấp thì giọng đều hơn giữa các câu (bench/tts_consistency.py)
+cfg_scale = 1.5           # tạm: giọng đều hơn giữa các câu (_local/tts_consistency); > 1 tốn gấp đôi mỗi frame, không chạy CUDA Graph
 
 [bridge]
 # claude_cli: gọi `claude -p` (Claude Code, dùng gói subscription đã đăng nhập), giữ ngữ cảnh bằng --resume

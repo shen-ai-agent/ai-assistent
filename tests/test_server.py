@@ -173,7 +173,7 @@ def test_speak_streams_audio(tmp_path):
         with client.websocket_connect("/ws") as ws:
             assert ws.receive_json()["tts"] == {"sample_rate": 48000, "voice": "maichi"}
             ws.send_json({"type": "speak", "text": TWO})
-            frames, sentences, planned = [], [], []
+            frames, sentences, planned, pauses = [], [], [], []
             while True:
                 msg = recv_any(ws)
                 if isinstance(msg, bytes):
@@ -184,11 +184,13 @@ def test_speak_streams_audio(tmp_path):
                     planned += msg["sentences"]
                 elif msg["type"] == "speak_sentence":
                     sentences.append(msg["index"])
+                    pauses.append(msg["pause_ms"])
                 elif msg["type"] == "speak_end":
                     end = msg
                     break
     assert [s["source"] for s in planned] == TWO_SRC
     assert sentences == [0, 1] and len(frames) == 6
+    assert pauses[0] == 0 and pauses[1] > 200  # nghỉ sau dấu chấm, web chèn theo lịch phát
     assert all(int.from_bytes(f[:4], "little") == start["speak_id"] for f in frames)
     assert len(frames[0]) == 4 + 4800 * 2 and np.frombuffer(frames[0][4:], "<i2")[0] == 16383
     assert end["cancelled"] is False and end["audio_ms"] == 600 and end["ttfa_ms"] is not None

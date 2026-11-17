@@ -50,7 +50,10 @@ def _cut(sentence: str, limit: int) -> list[str]:
 
 def split_sentences(text: str, *, min_len: int = MIN_LEN, max_len: int = MAX_LEN, first_max: int = FIRST_MAX,
                     key: Callable[[str], str] | None = None) -> list[str]:
-    """key: chỉ gộp hai câu khi key giống nhau (vd ngôn ngữ, để không trộn câu Việt với câu Anh)."""
+    """key: chỉ gộp hai câu khi key giống nhau (vd ngôn ngữ, để không trộn câu Việt với câu Anh).
+
+    first_max=0: không cắt câu đầu ở dấu phẩy (normalize.prepare dùng vậy, để giữ ngữ điệu cả câu).
+    """
     sents = [part for s in _raw_split(text) for part in _cut(s, max_len)]
 
     merged: list[str] = []
@@ -61,7 +64,7 @@ def split_sentences(text: str, *, min_len: int = MIN_LEN, max_len: int = MAX_LEN
         else:
             merged.append(s)
 
-    if merged and len(merged[0]) > first_max:
+    if first_max and merged and len(merged[0]) > first_max:
         first = _cut(merged[0], first_max)
         # Chỉ tách nếu phần đầu không quá ngắn
         if len(first) > 1 and len(first[0]) >= min_len:

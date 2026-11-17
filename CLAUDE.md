@@ -27,6 +27,9 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 .venv/Scripts/python bench/tts_bench.py --model zerotts --gpu --voice maichi  # benchmark TTS (35 đoạn mẫu)
 .venv/Scripts/python bench/tts_bench.py --compare             # bảng so sánh các run TTS
 .venv/Scripts/python bench/tts_ws_client.py                   # đo DoD TTS qua /ws, server phải đang chạy
+.venv/Scripts/python bench/tts_render.py --session _local/sessions/<ngày>.jsonl --last 3  # wav A/B ngắt nghỉ cũ/mới (CPU)
+.venv/Scripts/python bench/lecture_prosody.py <audio...> | --cached  # đo nhịp giảng (Whisper word timestamps), đề xuất PAUSES
+.venv/Scripts/python bench/tts_consistency.py --session _local/sessions/<ngày>.jsonl  # giọng có đều giữa các câu (temperature/cfg), CPU
 .venv/Scripts/python bench/record.py --sentences data/wake_phrases.tsv --out data/wake_testset  # bộ gọi tên (người dùng ghi)
 .venv/Scripts/python bench/wake_bench.py [--name X --min-score 0.75] / --compare  # đo nhận tên, tắt server trước
 .venv/Scripts/python bench/claude_ws_client.py                # đo DoD Phase 4 (hỏi Claude thật, tốn hạn mức), server phải đang chạy
@@ -57,6 +60,9 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 - `server/tts/`: TTS (Phase 3).
   - `normalize.py`: text viết → text đọc. `clean_structure` (cắt sau `---CODE---`, code, markdown, URL) → `split_sentences` → `speakable` từng câu (lexicon `data/lexicon.tsv`, số, đơn vị, viết tắt). `prepare` trả `Segment(text, lang, source)`.
   - `splitter.py`: tách câu, không tách ở số thập phân, viết tắt, tên file.
+  - Ngắt nghỉ: `normalize.PAUSES` + `pause_ms` cho `Segment.pause_ms` (phẩy để model tự ngắt, chấm/hỏi/chuyển đoạn chèn thêm, lệch ±15% theo crc32). Server gửi trong `speak_sentence.pause_ms`, web chèn khoảng lặng theo lịch phát (không gửi byte lặng). `clean_structure` giữ dòng trống thành `
+
+`; feeder có thể cắt giữa hai dấu xuống dòng nên `speak()` kiểm thêm `seam_pause`. `prosody.py`: đo nhịp từ mốc thời gian từng từ. `voicefeat.py`: cao độ/độ to/độ hơi từng câu, đo độ lệch giữa các câu (ZeroTTS lấy mẫu mỗi câu độc lập, `[tts] temperature`/`cfg_scale`).
   - `synth.py`: `ZeroTtsEngine` (ONNX GPU, `synthesize_stream`, 48kHz), `TtsService` (tự đọc lại lexicon).
   - `zerotts_gpu.py`: `ZeroTtsGpu`, bản ZeroTTS ít phụ thuộc CPU (máy bận thì TTS không giật). `local_frame_decode` chạy CUDA Graph bằng bản graph đã sửa trong `models/zerotts-graph/` (tự tạo bằng gói `onnx`, tạo lại khi model đổi), KV cache/state codec giữ trên GPU qua IOBinding. Audio phải trùng bản gốc tới từng mẫu: `GPU_TESTS=1 pytest tests/test_tts_gpu.py` (tắt server trước). Lỗi gì cũng tự quay về chạy thường. Server đặt priority `high` (`[server] priority`).
 - `server/`: voice server FastAPI (Phase 2). `protocol.py` là nguồn duy nhất định nghĩa message WebSocket; sửa protocol thì sửa cả `web/app.js`. `app.py` có `create_app(cfg, engine_factory, tts_factory, bridge_factory, vad_factory)` để test thay engine giả (`tests/test_server.py`); `Config.tts_enabled` mặc định tắt, `Config.bridge_kind` mặc định `"none"`; `server/config.toml` bật cả hai. STT và TTS mỗi bên một khoá GPU riêng. `turnlog.py` ghi log lượt nói và bản sửa tay.
