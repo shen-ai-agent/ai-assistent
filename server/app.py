@@ -31,8 +31,9 @@ from .handsfree import HandsFree
 from .learn_api import router as learn_router
 from .protocol import ErrorCode, ListenMode, State
 from .stt.service import SttService, speech_ms
-from .study import Library, StudyError, StudyService
+from .study import Library, MapService, StudyError, StudyService
 from .study.api import router as study_router
+from .study.mindmap import MAP_SLOTS
 from .tts.synth import TtsService, to_pcm16
 from .turnlog import TurnLogger, new_turn_id
 
@@ -79,6 +80,17 @@ def _claude_tutor(cfg: Config):
                                            cfg.study_timeout_s)
 
 
+def _claude_mapper(cfg: Config):
+    """Tạo sơ đồ tư duy cho tab Học: lượt claude -p độc lập (generate), không tool, không session."""
+    if cfg.bridge_kind != "claude_cli":
+        return None
+    from .bridge.claude_cli import ClaudeCliBridge
+    # Sơ đồ cả lớp tạo nhiều sơ đồ bài cùng lúc: bridge riêng, không tranh slot với gợi ý / tóm tắt
+    bridge = ClaudeCliBridge(cfg.study_dir, cfg.study_prompt, [], generate_timeout_s=cfg.study_map_timeout_s,
+                             generate_slots=MAP_SLOTS)
+    return lambda system, text: bridge.generate(system, text, cfg.study_map_model)
+
+
 async def _preset_answer(text: str) -> AsyncIterator[TextDelta | Done]:
     yield TextDelta(text)
     yield Done()
@@ -89,7 +101,8 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
                bridge_factory: Callable[[Config], Bridge | None] = make_bridge,
                vad_factory: Callable[[], object] = _silero_session,
                agent_factory: Callable[[Config], tuple | None] = _vscode_agent,
-               tutor_factory: Callable[[Config], Callable | None] = _claude_tutor) -> FastAPI:
+               tutor_factory: Callable[[Config], Callable | None] = _claude_tutor,
+               mapper_factory: Callable[[Config], Callable | None] = _claude_mapper) -> FastAPI:
     cfg = cfg or load_config()
 
     @asynccontextmanager
@@ -126,7 +139,12 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
                 bridge.on_orphan = lambda text: app.state.sessions and app.state.sessions[-1].start_ask(
                     "(clipboard)", _preset_answer(text))
         make_tutor = tutor_factory(cfg)
-        app.state.study = StudyService(Library(cfg.study_dir, cfg.study_max_chars), make_tutor) if make_tutor else None
+        app.state.study = None
+        if make_tutor:
+            library = Library(cfg.study_dir, cfg.study_max_chars)
+            mapper = mapper_factory(cfg)
+            maps = MapService(library, mapper, cfg.study_map_prompt, cfg.study_course_prompt) if mapper else None
+            app.state.study = StudyService(library, make_tutor, maps)
         app.state.agent = None
         if parts := agent_factory(cfg):
             registry, launcher = parts
@@ -233,7 +251,7 @@ class Session:
         assistant = {"name": self.cfg.assistant_name, "sleep_silence_ms": self.cfg.assistant_sleep_silence_ms,
                      "active_silence_ms": self.cfg.assistant_active_silence_ms}
         agent = self.agent and {"auto_submit": self.cfg.agent_auto_submit}
-        study = self.study and {"max_chars": self.cfg.study_max_chars}
+        study = self.study and {"max_chars": self.cfg.study_max_chars, "maps": self.study.maps is not None}
         await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge, assistant, agent, study))
         await self.set_state(State.IDLE)
         if self.agent:

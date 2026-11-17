@@ -2,6 +2,8 @@
 // đọc text (TTS), giao việc cho Claude Code trong VS Code (tab Công việc), giảng tài liệu học (tab Học bài).
 // Protocol: server/protocol.py
 
+import { MindMap } from "./mindmap.js";
+
 const PREROLL_FRAMES = 3;            // 300ms trước lúc bấm, để không mất đầu câu
 const BACKOFF_MS = [1000, 2000, 5000];
 const AUDIO_OPTS = ["echoCancellation", "noiseSuppression", "autoGainControl"];
@@ -44,6 +46,12 @@ const ui = {
   studyReset: $("study-reset"), studySource: $("study-source"), studySourceText: $("study-source-text"),
   studyChat: $("study-chat"), studyQuick: $("study-quick"), studyError: $("study-error"),
   studyComposer: $("study-composer"), studyInput: $("study-input"), studyStop: $("study-stop"),
+  libMap: $("lib-map"), studyMapBtn: $("study-map-btn"), studyMap: $("study-map"), mapBack: $("map-back"),
+  mapTitle: $("map-title"), mapMeta: $("map-meta"), mapRegen: $("map-regen"), mapTools: $("map-tools"),
+  mapQuiz: $("map-quiz"), mapExpand: $("map-expand"), mapNotes: $("map-notes"), mapZoomOut: $("map-zoom-out"),
+  mapFit: $("map-fit"), mapZoomIn: $("map-zoom-in"), mapEmpty: $("map-empty"), mapEmptyText: $("map-empty-text"),
+  mapMake: $("map-make"), mapView: $("map-view"), mapDetail: $("map-detail"), mapDetailClose: $("map-detail-close"),
+  mapPath: $("map-path"), mapNode: $("map-node"), mapNote: $("map-note"), mapActions: $("map-actions"),
 };
 
 // Công việc giao cho VS Code (khai báo sớm vì showTab cần biết tính năng có bật không).
@@ -57,8 +65,11 @@ const tasks = { info: undefined, projects: [], items: new Map(), cards: new Map(
 // docId: tài liệu đang mở (nhớ qua lần tải lại); doc: bản đầy đủ đã tải (thêm text, history); loading: id đang tải.
 // manual: đã kéo thả sắp xếp (server có order.json) thì học bài không đưa tài liệu lên đầu; dragging: đang kéo.
 // subject: lớp đang mở (null = danh sách lớp, "" = chưa xếp lớp), nhớ qua localStorage như docId.
+// map: sơ đồ đang xem {kind: "doc" | "subject", id, data} (null = không xem), đè lên màn đang mở;
+// mapStack: sơ đồ trước đó (từ sơ đồ lớp bấm sang sơ đồ bài), ← quay lại; mapTimer: hỏi lại khi đang tạo.
 const study = { info: undefined, docs: [], docId: localStorage.getItem("studyDoc") || null, doc: null, loading: null,
-  manual: false, dragging: false, subjects: [], subject: localStorage.getItem("studySubject") };
+  manual: false, dragging: false, subjects: [], subject: localStorage.getItem("studySubject"),
+  map: null, mapStack: [], mapTimer: 0 };
 
 // ---------- Tab: #mimi (mặc định) / #tasks / #study / #detail, một trang để dùng chung WebSocket và mic ----------
 
@@ -992,6 +1003,7 @@ function askNow(text = ui.speakText.value.trim()) {
 
 function onAnswerStart(msg) {
   useChat(msg.doc_id != null); // câu trả lời của gia sư (tab Học bài) vào khung chat của tab đó
+  if (msg.doc_id != null && study.map) closeMaps(); // hỏi khi đang xem sơ đồ: về khung chat để thấy câu trả lời
   let el = bridge.pendingTurn;
   if (!el) {
     // Lượt gõ tay hoặc hotkey clipboard: lượt mới trong lịch sử, câu hỏi chỉ đọc
@@ -1726,6 +1738,7 @@ function renderDocList() {
   const done = docs.filter(docDone).length;
   ui.libMeta.textContent = docs.length ? `${docs.length} bài${done ? ` · xong ${done}` : ""}` : "";
   ui.studyEmpty.hidden = docs.length > 0;
+  ui.libMap.hidden = !study.info?.maps || !study.subject || !docs.length; // "Chưa xếp lớp" không có sơ đồ khoá
   ui.studyList.replaceChildren(...docs.map((d) => {
     const li = ui.docTpl.content.firstElementChild.cloneNode(true);
     li.dataset.id = d.id;
@@ -1736,6 +1749,8 @@ function renderDocList() {
     li.querySelector(".fill").style.width = `${d.total ? (100 * d.part) / d.total : 0}%`;
     li.querySelector(".doc-part").textContent = partLabel(d);
     li.querySelector(".doc-open").onclick = () => openDoc(d.id);
+    li.querySelector(".doc-map").hidden = !study.info?.maps;
+    li.querySelector(".doc-map").onclick = () => openMap("doc", d.id);
     li.querySelector(".doc-move").onclick = () => moveDoc(d);
     li.querySelector(".doc-rename").onclick = () => renameDoc(d);
     li.querySelector(".doc-delete").onclick = () => deleteDoc(d);
@@ -1777,6 +1792,35 @@ function renderSubjects() {
     li.querySelector(".doc-actions").remove();
   }
 }
+
+// Menu "⋯" trên thẻ bài / thẻ lớp: mở một menu một lúc; bấm ra ngoài, chọn một mục hoặc Esc thì đóng.
+// Bắt click ở pha capture để menu đóng trước khi mục được chọn chạy (confirm/prompt không hiện đè lên menu).
+function closeMenus(except = null) {
+  for (const list of document.querySelectorAll(".menu-list:not([hidden])")) {
+    if (list === except) continue;
+    list.hidden = true;
+    list.previousElementSibling.setAttribute("aria-expanded", "false");
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".menu-btn");
+  if (!btn) return closeMenus();
+  const list = btn.nextElementSibling;
+  closeMenus(list);
+  list.hidden = !list.hidden;
+  btn.setAttribute("aria-expanded", String(!list.hidden));
+  if (list.hidden) return;
+  list.classList.remove("up"); // gần đáy màn hình thì mở lên trên
+  const r = list.getBoundingClientRect();
+  list.classList.toggle("up", r.bottom > innerHeight - 8 && btn.getBoundingClientRect().top > r.height + 16);
+}, true);
+
+addEventListener("keydown", (e) => {
+  if (e.code !== "Escape" || !document.querySelector(".menu-list:not([hidden])")) return;
+  e.stopImmediatePropagation(); // Esc chỉ đóng menu, không dừng Mimi đang nói
+  closeMenus();
+}, true);
 
 // Kéo thả sắp xếp bằng pointer events trên tay nắm ⋮⋮: chạy cả chuột lẫn cảm ứng (HTML5 drag-and-drop không chạy
 // trên điện thoại). Thẻ đi theo ngón tay bằng cách chuyển chỗ trong DOM; thả ra thì gọi save(ids) nếu thứ tự đổi.
@@ -1874,9 +1918,11 @@ async function saveSubjectOrder(ids) {
 // Danh sách lớp, bài trong một lớp, hay một bài; bài nhớ từ lần trước thì tải khi mở tab
 function renderStudyView() {
   const inDoc = !!study.docId;
-  ui.studyHome.hidden = inDoc || study.subject !== null;
-  ui.studyLib.hidden = inDoc || study.subject === null;
-  ui.studyDoc.hidden = !inDoc;
+  const inMap = !!study.map;
+  ui.studyMap.hidden = !inMap;
+  ui.studyHome.hidden = inMap || inDoc || study.subject !== null;
+  ui.studyLib.hidden = inMap || inDoc || study.subject === null;
+  ui.studyDoc.hidden = inMap || !inDoc;
   if (study.docId && !study.doc && study.loading !== study.docId) openDoc(study.docId);
 }
 
@@ -2047,6 +2093,7 @@ function renderStudyDoc() {
   ui.studyBar.style.width = `${d.total ? (100 * d.part) / d.total : 0}%`;
   ui.studyProgress.textContent = partLabel(d);
   ui.studyReset.hidden = !d.started;
+  ui.studyMapBtn.hidden = !study.info?.maps;
   const started = d.started || d.history?.length;
   const quick = started ? STUDY_QUICK : [["Bắt đầu học", STUDY_START, true]];
   ui.studyQuick.replaceChildren(...quick.map(([label, text, main]) => {
@@ -2179,6 +2226,181 @@ ui.studyReset.onclick = async () => {
     showError(`Không học lại được: ${e.message}`);
   }
 };
+
+// ---------- Sơ đồ tư duy (web/mindmap.js): một bài, hoặc cả lớp gộp từ sơ đồ các bài ----------
+
+// REST GET/POST /api/study/{doc_id}/map và /api/study/subjects/{sid}/map (server/study/mindmap.py).
+// POST bắt đầu tạo nền rồi trả trạng thái; đang tạo ("running") thì hỏi lại mỗi MAP_POLL_MS.
+const MAP_POLL_MS = 2500;
+const mindmap = new MindMap(ui.mapView, {
+  onSelect: showMapNode,
+  refLabel: (id) => mapRef(id)?.ref ?? "Bài",
+  onRef: (id) => pushMap("doc", id),
+});
+
+const mapRef = (id) => study.map?.data?.refs?.find((r) => r.id === id);
+const mapPath = (m) => (m.kind === "doc" ? `/${encodeURIComponent(m.id)}/map` : `/subjects/${encodeURIComponent(m.id)}/map`);
+
+// Mở sơ đồ từ thư viện / bài đang học (bỏ các sơ đồ đã xem trước đó)
+function openMap(kind, id) {
+  study.mapStack = [];
+  showMap(kind, id);
+}
+
+// Từ sơ đồ lớp sang sơ đồ một bài: ← quay về sơ đồ lớp
+function pushMap(kind, id) {
+  if (study.map) study.mapStack.push({ kind: study.map.kind, id: study.map.id });
+  showMap(kind, id);
+}
+
+function showMap(kind, id) {
+  clearTimeout(study.mapTimer);
+  study.map = { kind, id, data: null };
+  ui.mapTitle.textContent = kind === "doc" ? study.docs.find((d) => d.id === id)?.title ?? "…" : subjectName(id);
+  ui.mapMeta.textContent = "Đang tải…";
+  ui.mapMeta.classList.remove("warn");
+  ui.mapDetail.hidden = ui.mapEmpty.hidden = ui.mapView.hidden = ui.mapTools.hidden = ui.mapRegen.hidden = true;
+  renderStudyView();
+  scrollTo(0, 0);
+  loadMap();
+}
+
+function closeMaps() {
+  clearTimeout(study.mapTimer);
+  study.map = null;
+  study.mapStack = [];
+  renderStudyView();
+}
+
+async function loadMap(method = "GET") {
+  const m = study.map;
+  if (!m) return;
+  clearTimeout(study.mapTimer);
+  let data;
+  try {
+    data = await studyApi(mapPath(m), method);
+  } catch (e) {
+    if (study.map !== m) return;
+    if (m.data) { // lỗi khi bấm Tạo lại: giữ sơ đồ cũ, báo lỗi
+      ui.mapMeta.textContent = e.message;
+      ui.mapMake.disabled = ui.mapRegen.disabled = false;
+    } else renderMapEmpty(e.message);
+    return;
+  }
+  if (study.map !== m) return; // trong lúc tải đã đóng / mở sơ đồ khác
+  const fresh = !!data.tree && data.created !== m.data?.created;
+  m.data = data;
+  renderMap(fresh);
+  if (data.status === "running") study.mapTimer = setTimeout(() => loadMap(), MAP_POLL_MS);
+}
+
+function renderMapEmpty(text) {
+  ui.mapEmpty.hidden = false;
+  ui.mapView.hidden = ui.mapTools.hidden = ui.mapRegen.hidden = ui.mapDetail.hidden = ui.mapMake.hidden = true;
+  ui.mapEmptyText.textContent = text;
+  ui.mapMeta.textContent = "";
+}
+
+function renderMap(fresh) {
+  const { kind, data: d } = study.map;
+  const running = d.status === "running";
+  ui.mapTitle.textContent = kind === "doc" ? d.title : `Sơ đồ khoá: ${d.title}`;
+  const missing = kind === "subject" ? d.lessons.filter((l) => !l.map).length : 0;
+  let meta = "";
+  if (running) meta = d.progress ?? "Mimi đang đọc bài và vẽ sơ đồ… thường mất 1 đến 3 phút";
+  else if (d.status === "error") meta = `Không tạo được sơ đồ: ${d.error}`;
+  else if (d.tree) {
+    meta = `Tạo ${timeAgo(d.created)}`;
+    if (kind === "subject") meta += ` · ${d.lessons.length} bài`;
+    if (d.stale) meta += " · có bài mới hoặc sơ đồ bài đã đổi, bấm Cập nhật";
+  }
+  ui.mapMeta.textContent = meta;
+  ui.mapMeta.classList.toggle("warn", !running && (!!d.stale || d.status === "error"));
+  ui.mapRegen.hidden = !d.tree;
+  ui.mapRegen.disabled = running;
+  ui.mapRegen.textContent = running ? "Đang tạo…" : d.stale ? "Cập nhật" : "Tạo lại";
+  ui.mapRegen.classList.toggle("secondary", !d.stale || running);
+  ui.mapEmpty.hidden = !!d.tree;
+  ui.mapView.hidden = ui.mapTools.hidden = !d.tree;
+  if (!d.tree) {
+    ui.mapDetail.hidden = true;
+    ui.mapMake.hidden = false;
+    ui.mapMake.disabled = running;
+    ui.mapMake.textContent = running ? "Đang tạo…" : "Tạo sơ đồ";
+    ui.mapEmptyText.textContent = kind === "doc"
+      ? "Chưa có sơ đồ cho bài này. Mimi đọc lại cả bài (và những chỗ bạn từng hỏi), dựng sơ đồ các ý chính, "
+        + "đánh dấu ⚠ ý dễ nhầm. Ôn bằng cách thu nhánh lại, tự nhớ rồi mở ra kiểm tra."
+      : `Lớp có ${d.lessons.length} bài${missing ? `, ${missing} bài chưa có sơ đồ` : ""}. Mimi `
+        + `${missing ? "tạo sơ đồ từng bài còn thiếu, rồi " : ""}gộp kiến thức cả khoá theo chủ đề, ghi rõ ý nào ở bài nào `
+        + "và nối các khái niệm liên quan giữa các bài.";
+    return;
+  }
+  if (fresh) {
+    ui.mapDetail.hidden = true;
+    mindmap.notes = ui.mapNotes.checked;
+    mindmap.set(d.tree); // khung phải đang hiện để đo được kích thước nút
+  }
+}
+
+function showMapNode(node, path) {
+  if (!node) return void (ui.mapDetail.hidden = true);
+  const m = study.map;
+  ui.mapDetail.hidden = false;
+  ui.mapPath.textContent = path.slice(0, -1).join(" › ");
+  ui.mapNode.textContent = `${node.warn ? "⚠ " : ""}${node.label}`;
+  ui.mapNote.textContent = node.note;
+  ui.mapNote.hidden = !node.note;
+  const buttons = [];
+  const button = (label, onclick, cls = "secondary") => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.textContent = label;
+    b.onclick = onclick;
+    buttons.push(b);
+  };
+  const docId = m.kind === "doc" ? m.id : node.refs[0];
+  if (docId && node.depth > 0) button("Mimi giảng ý này", () => explainNode(docId, node, path), "");
+  for (const id of node.refs) {
+    const r = mapRef(id);
+    if (r) button(`Sơ đồ ${r.ref}: ${r.title}`, () => pushMap("doc", id));
+  }
+  ui.mapActions.replaceChildren(...buttons);
+  ui.mapActions.hidden = !buttons.length;
+}
+
+// Về bài học rồi hỏi gia sư về đúng ý đang chọn (kèm nhánh cha cho rõ ngữ cảnh)
+async function explainNode(docId, node, path) {
+  const parent = path.length > 2 ? ` (thuộc phần "${path[path.length - 2]}")` : "";
+  const question = `Giảng kỹ cho mình ý "${node.label}"${parent}: nó là gì, vì sao quan trọng, cho ví dụ dễ nhớ.`;
+  closeMaps();
+  if (study.doc?.id !== docId) await openDoc(docId);
+  if (study.doc?.id === docId) askNow(question);
+}
+
+ui.libMap.onclick = () => study.subject && openMap("subject", study.subject);
+ui.studyMapBtn.onclick = () => study.doc && openMap("doc", study.doc.id);
+ui.mapBack.onclick = () => {
+  const prev = study.mapStack.pop();
+  if (prev) showMap(prev.kind, prev.id);
+  else closeMaps();
+};
+ui.mapMake.onclick = ui.mapRegen.onclick = () => {
+  ui.mapMake.disabled = ui.mapRegen.disabled = true;
+  loadMap("POST");
+};
+ui.mapQuiz.onclick = () => {
+  ui.mapNotes.checked = false;
+  mindmap.notes = false;
+  mindmap.select(null);
+  mindmap.collapseTo(1);
+};
+ui.mapExpand.onclick = () => mindmap.expandAll();
+ui.mapNotes.onchange = () => mindmap.setNotes(ui.mapNotes.checked);
+ui.mapFit.onclick = () => mindmap.fit();
+ui.mapZoomIn.onclick = () => mindmap.zoom(1.25);
+ui.mapZoomOut.onclick = () => mindmap.zoom(0.8);
+ui.mapDetailClose.onclick = () => mindmap.select(null);
 
 // ---------- Lịch sử phiên, transcript sửa được ----------
 

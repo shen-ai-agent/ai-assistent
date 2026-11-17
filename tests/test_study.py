@@ -301,7 +301,7 @@ def test_study_tab_over_websocket(tmp_path):
         doc = client.post("/api/study", json={"text": DOC}).json()
         assert client.get("/api/study").json()["docs"][0]["id"] == doc["id"]
         with client.websocket_connect("/ws") as ws:
-            assert ws.receive_json()["study"] == {"max_chars": 200_000}
+            assert ws.receive_json()["study"] == {"max_chars": 200_000, "maps": False}
             ws.send_json({"type": "study", "doc_id": doc["id"]})
             assert until(ws, "study_doc")[-1]["doc"]["id"] == doc["id"]
             ws.send_json({"type": "ask", "text": "Bắt đầu nhé"})

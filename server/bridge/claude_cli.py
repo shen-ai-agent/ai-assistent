@@ -94,7 +94,8 @@ class ClaudeCliBridge:
     name = "claude_cli"
 
     def __init__(self, workdir: Path, prompt_path: Path, tools: list[str], model: str = "",
-                 timeout_s: float = 120, exe: str | None = None, generate_timeout_s: float = 60):
+                 timeout_s: float = 120, exe: str | None = None, generate_timeout_s: float = 60,
+                 generate_slots: int = GENERATE_SLOTS):
         self.workdir = workdir
         self.prompt = load_prompt(prompt_path)
         self.tools = tools
@@ -104,7 +105,7 @@ class ClaudeCliBridge:
         self.exe = exe or shutil.which("claude")
         self.session_id: str | None = None
         self._lock = asyncio.Lock()  # một session chỉ chạy một lượt một lúc (nhiều tab)
-        self._generate_slots = asyncio.Semaphore(GENERATE_SLOTS)  # dùng chung mọi tab, không chặn ask()
+        self._generate_slots = asyncio.Semaphore(generate_slots)  # dùng chung mọi tab, không chặn ask()
 
     def new_session(self) -> None:
         self.session_id = None

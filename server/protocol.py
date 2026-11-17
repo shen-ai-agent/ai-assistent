@@ -40,7 +40,7 @@ Server → Client
    "bridge": {"kind": "claude_cli" | "clipboard", "auto_ask": bool, "session_id",
               "model": str | null, "models": [...]} | null,     model null = bridge không chọn được model
    "assistant": {"name": "Mimi", "sleep_silence_ms", "active_silence_ms"},   im lặng server chờ để hết đoạn
-   "study": {"max_chars"} | null}               null = tab Học tắt (bridge không phải claude_cli)
+   "study": {"max_chars", "maps"} | null}       null = tab Học tắt (bridge không phải claude_cli); maps = có sơ đồ tư duy
   {"type": "state", "value": "IDLE" | "LISTENING" | "TRANSCRIBING" | "WAITING_CLAUDE"}
   {"type": "transcript", "turn_id", "text", "topic", "topic_auto", "audio_ms", "stt_ms"}
   {"type": "error", "code": "...", "message": "..."}

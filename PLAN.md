@@ -216,6 +216,7 @@ AI-assistent/
 - [x] Ghi bộ test gọi tên (`data/wake_phrases.tsv`, 48 câu)
 - [ ] Ghi ≥30 phút âm nền, đo bằng `bench/wake_bench.py`
 - [x] **Tab Học bài (T-012, 04/11/2026):** dán text hoặc chọn file .txt/.md/.docx, Mimi đọc hết tài liệu, chia 3–8 phần, giảng từng phần bằng giọng nói, hết phần thì dừng hỏi; "tiếp", "giảng lại", "kiểm tra mình", hỏi chen giữa chừng. Thư viện lưu ở `_local/study/`, mỗi tài liệu một session Claude riêng, mở lại thì học tiếp. 14/11/2026: chia tài liệu theo lớp học (môn); trang đầu là danh sách lớp, vào lớp mới chọn bài; chuyển bài giữa các lớp; kéo thả tay nắm ⋮⋮ để sắp xếp lớp và bài
+- [x] **Sơ đồ tư duy tab Học bài (16/11/2026):** mỗi bài một sơ đồ (Claude đọc toàn văn + các phần đã chia + câu người học từng hỏi) và sơ đồ cả lớp gộp từ sơ đồ các bài (bài thiếu sơ đồ tạo trước, song song 3 lượt), theo chủ đề, ghi ý nào ở bài nào, nhánh "Liên hệ giữa các bài". Trình vẽ JS tự viết (`web/mindmap.js`): thu/mở nhánh, kéo, phóng to, ⚠ ý dễ nhầm; chế độ Ôn tập thu về nhánh chính để tự nhớ rồi mở ra kiểm tra; bấm một ý → "Mimi giảng ý này". Model `[study] map_model` (mặc định sonnet)
 - [x] Lệnh giọng nói (`server/assistant/commands.py`): "mở session mới", "dừng lại", "đọc lại" chạy ngay trên server, không hỏi Claude. Chỉ câu ngắn mới là lệnh
 - [ ] Bổ sung glossary + post-correction từ các lỗi STT gặp khi dùng thật (công cụ có rồi: trang Đề xuất học, T-007)
 - [ ] Ghi thêm 50–100 câu từ log thật vào testset, chạy lại benchmark (công cụ có rồi: `bench/build_personal_set.py` + `stt_bench.py --testset`, T-007)
@@ -372,7 +373,7 @@ AI-assistent/
 | 2 | Voice server + Web (STT) | 🟡 TODO xong; DoD trên trình duyệt chưa thực hiện: nói 10 câu, tự kết nối lại, chạy 1 giờ (T-002) |
 | 3 | TTS | ✅ 16/10/2026 — ZeroTTS GPU, giọng maichi, tiếng đầu ~80ms, VRAM 5.9GB (T-008) |
 | 4 | Claude bridge, chạy trọn vòng | 🟡 code xong (T-009), thả phím → nghe câu đầu 4.4s; còn thử 4a trên trình duyệt và dùng thật 3 buổi tối |
-| 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền. 04/11/2026: tab Học bài (T-012) |
+| 5 | Hoàn thiện trải nghiệm | 🟡 rảnh tay bước A code xong (T-010); bộ gọi tên: recall 94%, nhận nhầm 2% (chưa đạt 95% / 0); chờ đo âm nền. 04/11/2026: tab Học bài (T-012); 16/11/2026: sơ đồ tư duy bài / lớp |
 | 6 | Giọng của chính mình | ⬜ |
 | 7 | Dùng từ mọi thiết bị | 🟡 18/10/2026 — dùng được trong LAN qua HTTPS 8766, có PWA + giữ màn hình sáng; từ xa (4G) chưa làm |
 | 8 | Tự học dài hạn | 🟡 01/11/2026 — có kế hoạch (thêm D: hiểu ý giao việc); D: nút Sai dự án, trả lời "ừ / cái thứ hai / sai rồi", ghi nhãn intents; lexicon thêm TODO, README, PLAN.md… |

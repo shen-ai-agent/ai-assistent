@@ -145,6 +145,8 @@
         <h2 id="lib-title"></h2>
         <p id="lib-meta" class="orb-status"></p>
       </div>
+      <button id="lib-map" type="button" class="card-btn accent" hidden
+        title="Sơ đồ tư duy cả khoá: gộp kiến thức các bài theo chủ đề, kèm liên hệ giữa các bài"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M7.2 12h9.6M7 11c4-1 5-6 9.8-6M7 13c4 1 5 6 9.8 6"/></svg><span>Sơ đồ khoá học</span></button>
     </div>
     <p id="study-empty" class="empty">Lớp này chưa có tài liệu.</p>
     <ol id="study-list" class="study-list"></ol>
@@ -173,6 +175,39 @@
     </div>
   </dialog>
 
+  <!-- Sơ đồ tư duy của một bài hoặc cả lớp (web/mindmap.js); ← quay lại màn trước -->
+  <section id="study-map" class="study-map" hidden>
+    <div class="study-head">
+      <button id="map-back" type="button" class="secondary" title="Quay lại">←</button>
+      <div class="study-title">
+        <h2 id="map-title"></h2>
+        <p id="map-meta" class="orb-status"></p>
+      </div>
+      <button id="map-regen" type="button" class="secondary" hidden title="Mimi vẽ lại sơ đồ (bài đã học thêm, hoặc sơ đồ chưa ưng)">Tạo lại</button>
+    </div>
+    <div id="map-tools" class="map-tools" hidden>
+      <button id="map-quiz" type="button" title="Chỉ còn nhánh chính, ẩn ghi chú: tự nhớ các ý con trước, rồi bấm + để mở từng nhánh kiểm tra">Ôn tập</button>
+      <button id="map-expand" type="button">Mở hết</button>
+      <label class="map-check"><input id="map-notes" type="checkbox" checked> Ghi chú</label>
+      <span class="spacer"></span>
+      <button id="map-zoom-out" type="button" title="Thu nhỏ" aria-label="Thu nhỏ">−</button>
+      <button id="map-fit" type="button" title="Vừa khung">⤢</button>
+      <button id="map-zoom-in" type="button" title="Phóng to" aria-label="Phóng to">+</button>
+    </div>
+    <div id="map-empty" class="map-empty" hidden>
+      <p id="map-empty-text"></p>
+      <button id="map-make" type="button">Tạo sơ đồ</button>
+    </div>
+    <div id="map-view" class="mm" hidden></div>
+    <div id="map-detail" class="map-detail" hidden>
+      <button id="map-detail-close" type="button" class="link" aria-label="Đóng">✕</button>
+      <p id="map-path" class="hint"></p>
+      <h3 id="map-node"></h3>
+      <p id="map-note"></p>
+      <div id="map-actions" class="study-bar"></div>
+    </div>
+  </section>
+
   <section id="study-doc" class="study-doc" hidden>
     <div class="study-head">
       <button id="study-back" type="button" class="secondary" title="Về lớp">←</button>
@@ -192,6 +227,7 @@
     <div class="study-progress">
       <div class="bar"><div id="study-bar"></div></div>
       <span id="study-progress" class="hint"></span>
+      <button id="study-map-btn" type="button" class="card-btn small" hidden title="Sơ đồ tư duy của bài: hệ thống lại các ý để ôn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M7.2 12h9.6M7 11c4-1 5-6 9.8-6M7 13c4 1 5 6 9.8 6"/></svg><span>Sơ đồ</span></button>
       <button id="study-reset" type="button" class="link" title="Mimi quên bài đã giảng, chia phần và giảng lại từ phần 1">Học lại từ đầu</button>
     </div>
     <details id="study-source" class="study-source">
@@ -297,9 +333,15 @@
       <span class="doc-progress"><span class="bar"><span class="fill"></span></span><span class="doc-part"></span></span>
     </button>
     <div class="doc-actions">
-      <button type="button" class="link doc-move">Chuyển lớp</button>
-      <button type="button" class="link doc-rename">Đổi tên</button>
-      <button type="button" class="link danger doc-delete">Xoá</button>
+      <button type="button" class="card-btn doc-map" hidden title="Sơ đồ tư duy bài này"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="19" cy="12" r="2.2"/><circle cx="19" cy="19" r="2.2"/><path d="M7.2 12h9.6M7 11c4-1 5-6 9.8-6M7 13c4 1 5 6 9.8 6"/></svg><span>Sơ đồ</span></button>
+      <div class="card-menu">
+        <button type="button" class="card-btn menu-btn" title="Thêm" aria-label="Thêm" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+        <div class="menu-list" role="menu" hidden>
+          <button type="button" role="menuitem" class="doc-move"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3z"/><path d="M10 14h7m-3-3 3 3-3 3"/></svg><span>Chuyển lớp</span></button>
+          <button type="button" role="menuitem" class="doc-rename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg><span>Đổi tên</span></button>
+          <button type="button" role="menuitem" class="danger doc-delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg><span>Xoá</span></button>
+        </div>
+      </div>
     </div>
   </li>
 </template>
@@ -313,8 +355,13 @@
       <span class="doc-progress"><span class="bar"><span class="fill"></span></span><span class="doc-part"></span></span>
     </button>
     <div class="doc-actions">
-      <button type="button" class="link subject-rename">Đổi tên</button>
-      <button type="button" class="link danger subject-delete">Xoá</button>
+      <div class="card-menu">
+        <button type="button" class="card-btn menu-btn" title="Thêm" aria-label="Thêm" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+        <div class="menu-list" role="menu" hidden>
+          <button type="button" role="menuitem" class="subject-rename"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg><span>Đổi tên</span></button>
+          <button type="button" role="menuitem" class="danger subject-delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg><span>Xoá lớp</span></button>
+        </div>
+      </div>
     </div>
   </li>
 </template>

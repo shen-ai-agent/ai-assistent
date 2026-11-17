@@ -1,5 +1,6 @@
 """REST /api/study cho tab Học: thêm, xem, đổi tên, chuyển lớp, học lại, xoá, sắp xếp (PUT /order) tài liệu;
 /api/study/subjects: lớp học (môn) để nhóm tài liệu. Giảng bài đi qua WebSocket (message study).
+Sơ đồ tư duy: GET/POST /{doc_id}/map và /subjects/{sid}/map (POST bắt đầu tạo nền, GET hỏi trạng thái + cây).
 
 File tải lên gửi bằng JSON base64 (không cần python-multipart): {"filename", "data_b64", "title"?};
 dán text: {"text", "title"?}. Cả hai nhận thêm "subject" (id lớp) để thêm thẳng vào lớp.
@@ -25,6 +26,13 @@ def _study(request: Request) -> StudyService:
     if study is None:
         raise HTTPException(503, "Tab Học cần [bridge] kind = \"claude_cli\" trong server/config.toml")
     return study
+
+
+def _maps(request: Request):
+    maps = _study(request).maps
+    if maps is None:
+        raise HTTPException(503, "Sơ đồ tư duy chưa bật")
+    return maps
 
 
 def _guard(fn, *args):
@@ -76,6 +84,17 @@ async def delete_subject(request: Request, sid: str):
     return {"ok": True}
 
 
+@router.get("/subjects/{sid}/map")
+async def subject_map(request: Request, sid: str):
+    return _guard(_maps(request).course_status, sid)
+
+
+@router.post("/subjects/{sid}/map")
+async def make_subject_map(request: Request, sid: str):
+    """Tạo (lại) sơ đồ cả lớp, tạo trước sơ đồ các bài còn thiếu. Chạy nền, trả trạng thái ngay."""
+    return _guard(_maps(request).start_course, sid)
+
+
 @router.post("")
 async def create_doc(request: Request, body: dict = Body(...)):
     lib = _study(request).library
@@ -105,6 +124,16 @@ async def get_doc(request: Request, doc_id: str):
     lib = _study(request).library
     doc = _guard(lib.get, doc_id)
     return {**doc.public(), "text": lib.text(doc_id), "history": lib.history(doc_id)}
+
+
+@router.get("/{doc_id}/map")
+async def doc_map(request: Request, doc_id: str):
+    return _guard(_maps(request).doc_status, doc_id)
+
+
+@router.post("/{doc_id}/map")
+async def make_doc_map(request: Request, doc_id: str):
+    return _guard(_maps(request).start_doc, doc_id)
 
 
 @router.patch("/{doc_id}")

@@ -5,6 +5,7 @@
   <id>/history.jsonl các lượt đã giảng xong: câu bạn hỏi + câu Mimi trả lời (đã bỏ dòng tiến độ)
   order.json         thứ tự người dùng kéo thả (chỉ có sau lần sắp xếp đầu tiên)
   subjects.json      các lớp học (môn) theo thứ tự hiển thị; mỗi tài liệu ghi id lớp trong meta.json
+  <id>/mindmap.md, maps/<sid>.md|json   sơ đồ tư duy của bài và của cả lớp (mindmap.py)
 
 Tiến độ lấy từ dòng `[Phần k/N: Tên phần]` Claude viết đầu mỗi lượt giảng (prompts/study_reply.md):
 MarkerFilter cắt dòng đó khỏi stream để không đọc thành tiếng.
@@ -27,6 +28,7 @@ DOCX_EXT = {".docx"}
 MAX_LINE = 1000   # tool Read cắt dòng dài hơn 2000 ký tự: dòng dán vào quá dài thì ngắt ở khoảng trắng
 ORDER_FILE = "order.json"   # thứ tự kéo thả trong thư viện: danh sách id, không có file = học gần nhất trước
 SUBJECTS_FILE = "subjects.json"   # các lớp học theo thứ tự hiển thị
+MAPS_DIR = "maps"                 # sơ đồ tư duy cả lớp
 _ID = re.compile(r"^[0-9]{8}-[0-9]{6}(-[0-9]+)?$")
 
 
@@ -320,11 +322,13 @@ class Library:
                 continue
         return out
 
-    def _subject(self, sid: str) -> Subject:
+    def get_subject(self, sid: str) -> Subject:
         for s in self.subjects():
             if s.id == sid:
                 return s
         raise StudyError("Không có lớp này")
+
+    _subject = get_subject
 
     def _subject_name(self, name: str, skip: str | None = None) -> str:
         name = " ".join(str(name or "").split())[:60]
@@ -361,6 +365,8 @@ class Library:
                 doc.subject = None
                 self.save(doc, touch=False)
         self._write_json(SUBJECTS_FILE, [asdict(s) for s in self.subjects() if s.id != sid])
+        for path in self.course_map_paths(sid):
+            path.unlink(missing_ok=True)
 
     def reorder_subjects(self, ids: list[str]) -> list[Subject]:
         """Thứ tự kéo thả các lớp; lớp không có trong ids giữ thứ tự cũ, xếp sau."""
@@ -388,6 +394,14 @@ class Library:
 
     def workdir(self, doc_id: str) -> Path:
         return self._dir(doc_id)
+
+    def doc_map_path(self, doc_id: str) -> Path:
+        return self._dir(doc_id) / "mindmap.md"
+
+    def course_map_paths(self, sid: str) -> tuple[Path, Path]:
+        """(sơ đồ markdown, meta json) của lớp. sid lấy từ subjects.json nên an toàn làm tên file."""
+        d = self.root / MAPS_DIR
+        return d / f"{sid}.md", d / f"{sid}.json"
 
     def text(self, doc_id: str) -> str:
         return (self._dir(doc_id) / "doc.md").read_text(encoding="utf-8")

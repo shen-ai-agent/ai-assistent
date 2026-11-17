@@ -87,6 +87,11 @@ prompt = "prompts/study_reply.md"
 tools = ["Read", "WebSearch", "WebFetch"]   # Read: đọc doc.md trong thư mục tài liệu
 timeout_s = 300
 max_chars = 200000
+# Sơ đồ tư duy: bài (map_prompt) và cả lớp gộp từ sơ đồ các bài (course_prompt). Đổi "opus" nếu muốn sơ đồ kỹ hơn
+map_prompt = "prompts/study_mindmap.md"
+course_prompt = "prompts/study_course_map.md"
+map_model = "sonnet"
+map_timeout_s = 300
 
 [log]
 dir = "_local/logs"

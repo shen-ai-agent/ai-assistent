@@ -86,6 +86,11 @@ class Config:
     study_tools: list[str] = field(default_factory=lambda: ["Read", "WebSearch", "WebFetch"])
     study_timeout_s: float = 300   # lượt đầu phải đọc cả tài liệu
     study_max_chars: int = 200_000
+    # Sơ đồ tư duy (mindmap) từng bài và cả lớp: lượt claude -p độc lập, không tool, không session
+    study_map_prompt: Path = ROOT / "prompts" / "study_mindmap.md"
+    study_course_prompt: Path = ROOT / "prompts" / "study_course_map.md"
+    study_map_model: str = "sonnet"
+    study_map_timeout_s: float = 300
 
 
 _PATHS = ("bridge_workdir", "bridge_prompt", "bridge_log_dir")
@@ -101,7 +106,7 @@ def load_config(path: Path = DEFAULT_PATH) -> Config:
     server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key") if k in server})
     agent = {f"agent_{k}": v for k, v in raw.get("agent", {}).items()}
     study = {f"study_{k}": v for k, v in raw.get("study", {}).items()}
-    study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt") if k in study})
+    study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt", "study_map_prompt", "study_course_prompt") if k in study})
     agent.update({k: ROOT / agent[k] for k in ("agent_projects_file", "agent_log_dir") if k in agent})
     if "agent_roots" in agent:
         agent["agent_roots"] = [Path(p) for p in agent["agent_roots"]]

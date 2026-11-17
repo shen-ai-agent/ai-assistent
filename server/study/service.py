@@ -14,6 +14,7 @@ from typing import AsyncIterator, Awaitable, Callable
 
 from ..bridge.base import Bridge, Done, TextDelta
 from .library import Library, MarkerFilter, StudyDoc
+from .mindmap import MapService
 
 TutorFactory = Callable[[Path], Bridge]
 
@@ -26,9 +27,10 @@ def first_prompt(doc: StudyDoc, question: str) -> str:
 
 
 class StudyService:
-    def __init__(self, library: Library, tutor_factory: TutorFactory):
+    def __init__(self, library: Library, tutor_factory: TutorFactory, maps: MapService | None = None):
         self.library = library
         self.tutor_factory = tutor_factory
+        self.maps = maps   # sơ đồ tư duy; None = tắt
         self._tutors: dict[str, Bridge] = {}
 
     def tutor(self, doc: StudyDoc) -> Bridge:
