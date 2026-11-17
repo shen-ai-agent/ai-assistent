@@ -86,6 +86,7 @@ class Config:
     # Tab Học (T-012): giảng tài liệu, dùng claude của [bridge] (cần kind = "claude_cli")
     study_dir: Path = ROOT / "_local" / "study"          # mỗi tài liệu một thư mục, cũng là cwd của Claude
     study_prompt: Path = ROOT / "prompts" / "study_reply.md"
+    study_exams: Path = ROOT / "data" / "exams"          # dạng đề thi, mỗi lớp chọn một (server/study/exams.py)
     study_tools: list[str] = field(default_factory=lambda: ["Read", "WebSearch", "WebFetch"])
     study_timeout_s: float = 300   # lượt đầu phải đọc cả tài liệu
     study_max_chars: int = 200_000
@@ -109,7 +110,8 @@ def load_config(path: Path = DEFAULT_PATH) -> Config:
     server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key") if k in server})
     agent = {f"agent_{k}": v for k, v in raw.get("agent", {}).items()}
     study = {f"study_{k}": v for k, v in raw.get("study", {}).items()}
-    study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt", "study_map_prompt", "study_course_prompt") if k in study})
+    study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt", "study_exams", "study_map_prompt",
+                                               "study_course_prompt") if k in study})
     agent.update({k: ROOT / agent[k] for k in ("agent_projects_file", "agent_log_dir") if k in agent})
     if "agent_roots" in agent:
         agent["agent_roots"] = [Path(p) for p in agent["agent_roots"]]

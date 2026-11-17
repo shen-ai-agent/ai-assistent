@@ -98,6 +98,7 @@ class ClaudeCliBridge:
                  generate_slots: int = GENERATE_SLOTS):
         self.workdir = workdir
         self.prompt = load_prompt(prompt_path)
+        self.extra_prompt = ""   # nối sau prompt ở mỗi lượt (tab Học: dạng đề của lớp, server/study/exams.py)
         self.tools = tools
         self.model = model
         self.timeout_s = timeout_s
@@ -110,11 +111,14 @@ class ClaudeCliBridge:
     def new_session(self) -> None:
         self.session_id = None
 
+    def system_prompt(self) -> str:
+        return f"{self.prompt}\n\n{self.extra_prompt}" if self.extra_prompt else self.prompt
+
     def command(self, text: str) -> list[str]:
         tools = ",".join(self.tools)
         cmd = [self.exe, "-p", text, "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                "--tools", tools, "--allowedTools", tools, "--strict-mcp-config",
-               "--settings", json.dumps(SETTINGS), "--append-system-prompt", self.prompt]
+               "--settings", json.dumps(SETTINGS), "--append-system-prompt", self.system_prompt()]
         if self.model:
             cmd += ["--model", self.model]
         if self.session_id:

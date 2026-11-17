@@ -4,6 +4,9 @@
 Lượt đầu (chưa có session) gửi kèm lời dặn đọc doc.md; các lượt sau Claude đã có tài liệu trong ngữ cảnh.
 Tiến độ (dòng `[Phần k/N: …]`) và lịch sử lưu ngay khi có, session chỉ lưu khi lượt trả lời xong
 (giống ClaudeCliBridge: lượt bị ngắt không thành ngữ cảnh).
+
+Lớp của tài liệu có dạng đề (exams.py) thì mỗi lượt gắn hồ sơ đề vào `tutor.extra_prompt`, lấy lại theo lớp hiện tại
+nên chuyển lớp hay đổi dạng đề giữa chừng cũng đúng.
 """
 
 from __future__ import annotations
@@ -13,7 +16,8 @@ from pathlib import Path
 from typing import AsyncIterator, Awaitable, Callable
 
 from ..bridge.base import Bridge, Done, TextDelta
-from .library import Library, MarkerFilter, StudyDoc
+from .exams import ExamProfiles
+from .library import Library, MarkerFilter, StudyDoc, StudyError
 from .mindmap import MapService
 
 TutorFactory = Callable[[Path], Bridge]
@@ -27,10 +31,12 @@ def first_prompt(doc: StudyDoc, question: str) -> str:
 
 
 class StudyService:
-    def __init__(self, library: Library, tutor_factory: TutorFactory, maps: MapService | None = None):
+    def __init__(self, library: Library, tutor_factory: TutorFactory, maps: MapService | None = None,
+                 exams: ExamProfiles | None = None):
         self.library = library
         self.tutor_factory = tutor_factory
         self.maps = maps   # sơ đồ tư duy; None = tắt
+        self.exams = exams  # dạng đề theo lớp; None = tắt
         self._tutors: dict[str, Bridge] = {}
 
     def tutor(self, doc: StudyDoc) -> Bridge:
@@ -39,6 +45,17 @@ class StudyService:
             t = self._tutors[doc.id] = self.tutor_factory(self.library.workdir(doc.id))
             t.session_id = doc.session_id
         return t
+
+    def exam_prompt(self, doc: StudyDoc) -> str:
+        """Hồ sơ dạng đề của lớp chứa tài liệu, "" nếu không có."""
+        if self.exams is None or not doc.subject:
+            return ""
+        try:
+            exam = self.library.get_subject(doc.subject).exam
+        except StudyError:
+            return ""
+        profile = self.exams.get(exam)
+        return f"# Dạng đề của lớp này\n\n{profile.text}" if profile else ""
 
     def forget(self, doc_id: str) -> None:
         """Bỏ bridge đã tạo (học lại từ đầu, xoá tài liệu)."""
@@ -51,6 +68,7 @@ class StudyService:
         tutor = self.tutor(doc)
         if model is not None and hasattr(tutor, "model"):
             tutor.model = model   # theo ô chọn model chung của web
+        tutor.extra_prompt = self.exam_prompt(doc)
         prompt = question if tutor.session_id else first_prompt(doc, question)
         marker = MarkerFilter()
         parts: list[str] = []

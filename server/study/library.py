@@ -63,6 +63,7 @@ class Subject:
     id: str
     name: str
     created: float
+    exam: str | None = None   # dạng đề (key trong data/exams, exams.py); None = gia sư tự hỏi như thường
 
 
 def _new_id(base: str, taken) -> str:
@@ -354,6 +355,16 @@ class Library:
         for s in subs:
             if s.id == sid:
                 s.name = name
+        self._write_json(SUBJECTS_FILE, [asdict(s) for s in subs])
+        return self._subject(sid)
+
+    def set_subject_exam(self, sid: str, exam: str | None) -> Subject:
+        """Gắn dạng đề cho lớp (None = bỏ). Key có tồn tại hay không do api.py kiểm qua ExamProfiles."""
+        subs = self.subjects()
+        self._subject(sid)
+        for s in subs:
+            if s.id == sid:
+                s.exam = exam or None
         self._write_json(SUBJECTS_FILE, [asdict(s) for s in subs])
         return self._subject(sid)
 

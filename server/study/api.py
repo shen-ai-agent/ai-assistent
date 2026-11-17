@@ -1,5 +1,6 @@
 """REST /api/study cho tab Học: thêm, xem, đổi tên, chuyển lớp, học lại, xoá, sắp xếp (PUT /order) tài liệu;
-/api/study/subjects: lớp học (môn) để nhóm tài liệu. Giảng bài đi qua WebSocket (message study).
+/api/study/subjects: lớp học (môn) để nhóm tài liệu, mỗi lớp chọn một dạng đề (exams.py; danh sách dạng đề đi kèm
+GET /api/study). Giảng bài đi qua WebSocket (message study).
 Sơ đồ tư duy: GET/POST /{doc_id}/map và /subjects/{sid}/map (POST bắt đầu tạo nền, GET hỏi trạng thái + cây).
 
 File tải lên gửi bằng JSON base64 (không cần python-multipart): {"filename", "data_b64", "title"?};
@@ -42,22 +43,24 @@ def _guard(fn, *args):
         raise HTTPException(404 if str(e).startswith(("Không có tài liệu", "Không có lớp")) else 400, str(e)) from None
 
 
-def _listing(lib, docs) -> dict:
+def _listing(study: StudyService, docs) -> dict:
+    lib = study.library
+    exams = study.exams.all() if study.exams else []
     return {"docs": [d.public() for d in docs], "manual": lib.manual_order,
-            "subjects": [asdict(s) for s in lib.subjects()]}
+            "subjects": [asdict(s) for s in lib.subjects()], "exams": [e.public() for e in exams]}
 
 
 @router.get("")
 async def list_docs(request: Request):
-    lib = _study(request).library
-    return _listing(lib, lib.all())
+    study = _study(request)
+    return _listing(study, study.library.all())
 
 
 @router.put("/order")
 async def reorder_docs(request: Request, body: dict = Body(...)):
     """Thứ tự kéo thả trong thư viện: {"ids": [...]}, trả lại danh sách đã sắp xếp."""
-    lib = _study(request).library
-    return _listing(lib, _guard(lib.reorder, body.get("ids")))
+    study = _study(request)
+    return _listing(study, _guard(study.library.reorder, body.get("ids")))
 
 
 # ---------- Lớp học (khai báo trước /{doc_id}) ----------
@@ -73,8 +76,18 @@ async def reorder_subjects(request: Request, body: dict = Body(...)):
 
 
 @router.patch("/subjects/{sid}")
-async def rename_subject(request: Request, sid: str, body: dict = Body(...)):
-    return asdict(_guard(_study(request).library.rename_subject, sid, body.get("name")))
+async def update_subject(request: Request, sid: str, body: dict = Body(...)):
+    """{"name"?} đổi tên, {"exam"?} chọn dạng đề (key trong data/exams, null = bỏ)."""
+    study = _study(request)
+    sub = _guard(study.library.get_subject, sid)
+    if "name" in body:
+        sub = _guard(study.library.rename_subject, sid, body.get("name"))
+    if "exam" in body:
+        exam = body["exam"] or None
+        if exam is not None and (study.exams is None or study.exams.get(exam) is None):
+            raise HTTPException(400, "Không có dạng đề này")
+        sub = _guard(study.library.set_subject_exam, sid, exam)
+    return asdict(sub)
 
 
 @router.delete("/subjects/{sid}")

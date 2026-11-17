@@ -125,6 +125,10 @@ def test_cli_bridge_streams_and_resumes(fake_bridge):
     assert "--fork-session" in cmd
     assert cmd[cmd.index("--append-system-prompt") + 1] == "Nói ngắn."
     assert json.loads(cmd[cmd.index("--settings") + 1])["claudeMdExcludes"] == ["**/CLAUDE.md"]
+    fake_bridge.extra_prompt = "# Dạng đề"            # tab Học: dạng đề của lớp nối sau prompt chính
+    cmd = fake_bridge.command("tiếp")
+    assert cmd[cmd.index("--append-system-prompt") + 1] == "Nói ngắn.\n\n# Dạng đề"
+    fake_bridge.extra_prompt = ""
     fake_bridge.model = "haiku"
     assert asyncio.run(collect(fake_bridge, "tiếp"))[-1].model == "claude-haiku"
     assert fake_bridge.session_id == "new-session-fork"

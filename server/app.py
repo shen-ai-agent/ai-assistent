@@ -31,7 +31,7 @@ from .handsfree import HandsFree
 from .learn_api import router as learn_router
 from .protocol import ErrorCode, ListenMode, State
 from .stt.service import SttService, speech_ms
-from .study import Library, MapService, StudyError, StudyService
+from .study import ExamProfiles, Library, MapService, StudyError, StudyService
 from .study.api import router as study_router
 from .study.mindmap import MAP_SLOTS
 from .tts.synth import TtsService, to_pcm16
@@ -146,7 +146,7 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
             library = Library(cfg.study_dir, cfg.study_max_chars)
             mapper = mapper_factory(cfg)
             maps = MapService(library, mapper, cfg.study_map_prompt, cfg.study_course_prompt) if mapper else None
-            app.state.study = StudyService(library, make_tutor, maps)
+            app.state.study = StudyService(library, make_tutor, maps, ExamProfiles(cfg.study_exams))
         app.state.agent = None
         if parts := agent_factory(cfg):
             registry, launcher = parts

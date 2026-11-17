@@ -39,6 +39,7 @@ const ui = {
   subjectNote: $("subject-note"), subjectEmpty: $("subject-empty"), subjectList: $("subject-list"),
   subjectLoose: $("subject-loose"), subjectTpl: $("subject-tpl"),
   libBack: $("lib-back"), libTitle: $("lib-title"), libMeta: $("lib-meta"),
+  libExamBox: $("lib-exam-box"), libExam: $("lib-exam"),
   moveDlg: $("move-dlg"), moveTitle: $("move-title"), moveList: $("move-list"), moveNew: $("move-new"),
   moveCancel: $("move-cancel"),
   studyDoc: $("study-doc"), studyBack: $("study-back"), studyOrb: $("study-orb"), studyDocTitle: $("study-doc-title"),
@@ -68,7 +69,7 @@ const tasks = { info: undefined, projects: [], items: new Map(), cards: new Map(
 // map: sơ đồ đang xem {kind: "doc" | "subject", id, data} (null = không xem), đè lên màn đang mở;
 // mapStack: sơ đồ trước đó (từ sơ đồ lớp bấm sang sơ đồ bài), ← quay lại; mapTimer: hỏi lại khi đang tạo.
 const study = { info: undefined, docs: [], docId: localStorage.getItem("studyDoc") || null, doc: null, loading: null,
-  manual: false, dragging: false, subjects: [], subject: localStorage.getItem("studySubject"),
+  manual: false, dragging: false, subjects: [], exams: [], subject: localStorage.getItem("studySubject"),
   map: null, mapStack: [], mapTimer: 0 };
 
 // ---------- Tab: #mimi (mặc định) / #tasks / #study / #detail, một trang để dùng chung WebSocket và mic ----------
@@ -1704,7 +1705,7 @@ function sendStudy() {
 // Ba màn: danh sách lớp (study.subject === null) → bài trong lớp (id lớp, "" = chưa xếp lớp) → một bài (docId)
 async function loadDocs() {
   try {
-    ({ docs: study.docs, manual: study.manual, subjects: study.subjects } = await studyApi());
+    ({ docs: study.docs, manual: study.manual, subjects: study.subjects, exams: study.exams } = await studyApi());
   } catch (e) {
     ui.subjectNote.textContent = `Không tải được thư viện: ${e.message}`;
   }
@@ -1745,6 +1746,7 @@ function renderDocList() {
   ui.libMeta.textContent = docs.length ? `${docs.length} bài${done ? ` · xong ${done}` : ""}` : "";
   ui.studyEmpty.hidden = docs.length > 0;
   ui.libMap.hidden = !study.info?.maps || !study.subject || !docs.length; // "Chưa xếp lớp" không có sơ đồ khoá
+  renderExamPicker();
   ui.studyList.replaceChildren(...docs.map((d) => {
     const li = ui.docTpl.content.firstElementChild.cloneNode(true);
     li.dataset.id = d.id;
@@ -1959,6 +1961,33 @@ async function addSubject(name) {
     return null;
   }
 }
+
+// Dạng đề của lớp đang mở (server/study/exams.py): gia sư ra đề kiểm tra theo format kỳ thi này.
+// "Chưa xếp lớp" không có dạng đề; server không có file dạng đề nào thì ẩn luôn.
+function renderExamPicker() {
+  const sub = study.subjects.find((s) => s.id === study.subject);
+  ui.libExamBox.hidden = !sub || !study.exams?.length;
+  if (ui.libExamBox.hidden) return;
+  const known = study.exams.some((e) => e.key === sub.exam);
+  ui.libExam.replaceChildren(new Option("Không (gia sư tự hỏi)", ""),
+    ...study.exams.map((e) => Object.assign(new Option(e.name, e.key), { title: e.summary })),
+    ...(sub.exam && !known ? [new Option(`${sub.exam} (không còn file)`, sub.exam)] : []));
+  ui.libExam.value = sub.exam ?? "";
+  ui.libExamBox.title = study.exams.find((e) => e.key === sub.exam)?.summary
+    || "Gia sư ra đề kiểm tra theo format kỳ thi này. Trả lời gồm đáp án và keyword.";
+}
+
+ui.libExam.addEventListener("change", async () => {
+  const sid = study.subject;
+  if (!sid) return;
+  try {
+    const sub = await studyApi(`/subjects/${encodeURIComponent(sid)}`, "PATCH", { exam: ui.libExam.value || null });
+    study.subjects = study.subjects.map((x) => (x.id === sub.id ? sub : x));
+  } catch (e) {
+    alert(`Không đổi được dạng đề: ${e.message}`);
+  }
+  renderExamPicker();
+});
 
 async function renameSubject(s) {
   const name = prompt("Tên mới cho lớp", s.name)?.trim();

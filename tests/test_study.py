@@ -13,7 +13,8 @@ from fastapi.testclient import TestClient
 from server.app import create_app
 from server.bridge import Done, TextDelta
 from server.config import Config
-from server.study import Library, MarkerFilter, StudyError, StudyService, extract_text
+from server.study import ExamProfiles, Library, MarkerFilter, StudyError, StudyService, extract_text
+from server.study.exams import parse_profile
 from server.study.library import MAX_LINE, clean_text, docx_text
 
 DOC = "# Amazon S3\nS3 là dịch vụ lưu trữ object của AWS. Bucket chứa object, mỗi object có key.\n"
@@ -259,6 +260,80 @@ def test_service_first_turn_reads_doc_then_resumes(tmp_path):
     assert "doc.md" in tutors[2].prompts[0]
 
 
+# ---------- Dạng đề (exams.py) ----------
+
+PROFILE = "# AWS SAA-C03\n\n> Đề tiếng Anh, 4 đáp án.\n\nViết đề bằng tiếng Anh.\n"
+
+
+def test_exam_profiles(tmp_path):
+    root = tmp_path / "exams"
+    assert ExamProfiles(root).all() == []                 # chưa có thư mục
+    root.mkdir()
+    (root / "aws-saa.md").write_text(PROFILE, encoding="utf-8")
+    (root / "Bad Name.md").write_text(PROFILE, encoding="utf-8")   # tên file không hợp lệ: bỏ qua
+    exams = ExamProfiles(root)
+    assert [e.public() for e in exams.all()] == [{"key": "aws-saa", "name": "AWS SAA-C03",
+                                                  "summary": "Đề tiếng Anh, 4 đáp án."}]
+    assert exams.get("aws-saa").text == PROFILE.strip()
+    for bad in (None, "", "../aws-saa", "khong-co"):
+        assert exams.get(bad) is None
+    assert parse_profile("x", "không tiêu đề").name == "x"
+
+
+def test_bundled_exam_profiles_have_name_and_summary():
+    """File thật trong data/exams: có tên, mô tả, và đủ ngắn để nằm trong dòng lệnh claude (Windows ~32K ký tự)."""
+    exams = ExamProfiles(Config().study_exams).all()
+    assert {"aws-saa-c03", "toeic-reading", "ielts-reading"} <= {e.key for e in exams}
+    base = len(Config().study_prompt.read_text(encoding="utf-8"))
+    for e in exams:
+        assert e.name != e.key and e.summary and base + len(e.text) < 20_000
+
+
+def test_service_attaches_subject_exam(tmp_path):
+    lib = Library(tmp_path / "study")
+    (tmp_path / "exams").mkdir()
+    (tmp_path / "exams" / "aws-saa.md").write_text(PROFILE, encoding="utf-8")
+    aws = lib.create_subject("AWS")
+    doc = lib.create(DOC, subject=aws.id)
+    tutors = []
+
+    def factory(workdir):
+        tutors.append(FakeTutor(workdir, ["Ok."]))
+        return tutors[-1]
+
+    study = StudyService(lib, factory, exams=ExamProfiles(tmp_path / "exams"))
+    asyncio.run(run_ask(study, doc.id, "hỏi mình"))
+    assert tutors[0].extra_prompt == ""                    # lớp chưa chọn dạng đề
+    assert lib.set_subject_exam(aws.id, "aws-saa").exam == "aws-saa"
+    asyncio.run(run_ask(study, doc.id, "ra đề"))            # cùng gia sư, lượt sau có dạng đề ngay
+    assert tutors[0].extra_prompt.startswith("# Dạng đề của lớp này") and "Viết đề bằng tiếng Anh." in tutors[0].extra_prompt
+    lib.move(doc.id, None)                                  # chuyển ra khỏi lớp: bỏ dạng đề
+    asyncio.run(run_ask(study, doc.id, "ra đề"))
+    assert tutors[0].extra_prompt == "" and len(tutors) == 1
+    lib.move(doc.id, aws.id)
+    lib.set_subject_exam(aws.id, "da-xoa")                  # file dạng đề đã xoá: như không có
+    asyncio.run(run_ask(study, doc.id, "ra đề"))
+    assert tutors[0].extra_prompt == ""
+
+
+def test_subject_exam_over_rest(tmp_path):
+    (tmp_path / "exams").mkdir()
+    (tmp_path / "exams" / "aws-saa.md").write_text(PROFILE, encoding="utf-8")
+    client, _ = study_client(tmp_path, [])
+    with client:
+        sub = client.post("/api/study/subjects", json={"name": "AWS"}).json()
+        assert sub["exam"] is None
+        listing = client.get("/api/study").json()
+        assert listing["exams"] == [{"key": "aws-saa", "name": "AWS SAA-C03", "summary": "Đề tiếng Anh, 4 đáp án."}]
+        url = f"/api/study/subjects/{sub['id']}"
+        assert client.patch(url, json={"exam": "aws-saa"}).json()["exam"] == "aws-saa"
+        assert client.patch(url, json={"exam": "khong-co"}).status_code == 400
+        assert client.patch(url, json={"name": "Amazon"}).json() == {**sub, "name": "Amazon", "exam": "aws-saa"}
+        assert client.get("/api/study").json()["subjects"][0]["exam"] == "aws-saa"
+        assert client.patch(url, json={"exam": None}).json()["exam"] is None
+        assert client.patch("/api/study/subjects/s20990101-000000", json={"exam": None}).status_code == 404
+
+
 # ---------- WebSocket + REST ----------
 
 class MainBridge(FakeTutor):
@@ -267,7 +342,7 @@ class MainBridge(FakeTutor):
 
 def study_client(tmp_path, tutors):
     cfg = Config(log_dir=tmp_path / "logs", save_audio=False, min_speech_ms=0, bridge_log_dir=tmp_path / "sessions",
-                 study_dir=tmp_path / "study")
+                 study_dir=tmp_path / "study", study_exams=tmp_path / "exams")
     main = MainBridge(None, ["Tab Mimi trả lời."])
 
     def make(workdir):
