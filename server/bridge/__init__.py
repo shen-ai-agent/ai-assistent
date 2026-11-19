@@ -18,4 +18,9 @@ def make_bridge(cfg) -> Bridge | None:
     if cfg.bridge_kind == "clipboard":
         from .clipboard import ClipboardBridge
         return ClipboardBridge(cfg.bridge_hotkey)
-    raise ValueError(f"[bridge] kind = {cfg.bridge_kind!r}: chỉ nhận claude_cli, clipboard, none")
+    if ":" in cfg.bridge_kind:
+        # Nguồn AI tự viết (Phase 10): "module:Lớp", lớp nhận Config và cài interface Bridge (base.py)
+        import importlib
+        module, cls = cfg.bridge_kind.split(":")
+        return getattr(importlib.import_module(module), cls)(cfg)
+    raise ValueError(f"[bridge] kind = {cfg.bridge_kind!r}: chỉ nhận claude_cli, clipboard, none hoặc module:Lớp")

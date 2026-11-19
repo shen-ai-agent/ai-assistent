@@ -109,7 +109,7 @@ Kiểm tra server bằng audio của bộ test, không cần nói (server phải
 Khối **Đọc** trên trang chính: dán text rồi bấm **Đọc** (hoặc `Ctrl+Enter`). Bấm ⏹ hoặc `Esc` để dừng; bắt đầu nói (giữ Space) cũng dừng đọc.
 Danh sách bên dưới hiện từng câu và cách server sẽ đọc nó, câu đang đọc sáng lên.
 
-- Model: ZeroTTS trên GPU, giọng `maichi`. Đổi giọng hoặc tắt TTS trong bảng `[tts]` của `server/config.toml`.
+- Model: ZeroTTS trên GPU, giọng `maichi`. Tắt TTS hoặc đổi model bằng `[tts] enabled` / `engine` trong `server/config.toml`; giọng và tham số riêng của từng model nằm ở bảng `[tts.<engine>]` (ví dụ `[tts.zerotts] voice`).
 - Cách đọc thuật ngữ / viết tắt: `data/lexicon.tsv`, server tự đọc lại khi file đổi.
 - Muốn Claude trả lời theo văn nói thì dán `prompts/voice_reply.md` vào Custom instructions của Claude Project.
 - Log server có cảnh báo "ZeroTTS đang chạy CPU…" nghĩa là `onnxruntime-gpu` sai bản: chạy lại hai lệnh cuối ở phần Cài đặt.
@@ -123,7 +123,9 @@ Benchmark và đo (tắt server trước khi chạy `tts_bench.py`):
 .venv\Scripts\python bench\tts_ws_client.py                       # server đang chạy: đo tiếng đầu, hụt, dừng, VRAM
 ```
 
-Ứng viên khác (VieNeu, OmniVoice) cần venv riêng vì xung đột thư viện; xem đầu `bench/tts_bench.py`.
+Ứng viên khác (VieNeu, OmniVoice) cần venv riêng vì xung đột thư viện. Cài vào `_local\venvs\<model>`, rồi bảng `[tts.<model>]` có `python = "..."` là server và `tts_bench.py --model <model>` tự chạy model đó trong tiến trình riêng (worker).
+
+Đổi model: tab **Cài đặt** (icon bánh răng) trên web liệt kê mọi bảng `[tts.<model>]`, bấm model muốn dùng rồi xác nhận. Server dừng câu đang đọc, tắt model cũ, nạp model mới và đọc thử; trong lúc đó mọi tab hiện lớp chờ có thanh tiến trình và không nhận lệnh. Nạp lỗi thì server nạp lại model cũ. Lựa chọn lưu ở `_local/settings.json` và được dùng ở lần khởi động sau (ghi đè `[tts] engine`); xoá file đó để quay về config. Model chọn ở đây dùng chung cho mọi tab. Tab Cài đặt cũng là nơi chọn model Claude.
 
 ## Hỏi Claude (Phase 4)
 

@@ -33,10 +33,17 @@ Client → Server
   Tab Học (T-012, chỉ khi hello.study khác null; thêm/xoá tài liệu qua REST /api/study):
   {"type": "study", "doc_id": "<id>" | null}    tab Học đang mở tài liệu doc_id (null = rời tab / đóng tài liệu):
         mọi câu nói/gõ hỏi Mimi (trừ lệnh "dừng", "đọc lại") đi tới gia sư Claude riêng của tài liệu đó
+  Tab Cài đặt (server/tts_switch.py):
+  {"type": "tts_switch", "engine": "<tên>"}      đổi model TTS cho cả server (mọi tab). Trong lúc đổi, server từ
+        chối start/speak/ask/tts_switch (error tts_switching) và bỏ frame mic rảnh tay
 
 Server → Client
   {"type": "hello", "topics": [...], "model": "...", "sample_rate": 16000,
-   "tts": {"sample_rate": 48000, "voice": "..."} | null,          null = server tắt TTS
+   "tts": {"sample_rate": 48000, "voice": "...", "engine": "zerotts", "label": "ZeroTTS"} | null,   null = tắt TTS
+   "settings": {"tts_engines": [{"name", "label", "available", "note"}], "tts_switch": <job> | null,
+               "stt": {"engine", "model", "device"}},
+        tts_engines = các bảng [tts.<tên>] trong config (available false = venv chưa cài); tts_switch khác null
+        = đang đổi model (tab mở giữa chừng cũng hiện lớp chờ)
    "bridge": {"kind": "claude_cli" | "clipboard", "auto_ask": bool, "session_id",
               "model": str | null, "models": [...]} | null,     model null = bridge không chọn được model
    "assistant": {"name": "Mimi", "sleep_silence_ms", "active_silence_ms"},   im lặng server chờ để hết đoạn
@@ -61,6 +68,10 @@ Server → Client
   {"type": "generate_result", "req_id", "text": str | null, "error": str | null, "ms"}
         trả lời generate, chỉ gửi cho tab đã hỏi. Đúng một trong text/error khác null. Bridge không phải
         claude_cli hoặc model không cho phép cũng trả error ở đây (có req_id để client bỏ chờ ngay)
+  {"type": "tts_switch", "job": <job>, "tts": <như hello.tts> | null, "engines": [...]}   gửi mọi tab ở mỗi bước
+        đổi model. <job> = {"engine", "label", "from", "steps": ["Dừng câu đang đọc", ...], "step": i (bước đang
+        chạy, = len(steps) khi xong), "status": "running" | "done" | "failed", "error", "elapsed_s", "failed_step"}.
+        failed: server đã nạp lại model cũ (thêm bước cuối; tts là model đang dùng, null nếu nạp lại cũng lỗi)
   {"type": "study_doc", "doc": {"id", "title", "source", "chars", "created", "updated", "started", "part", "total",
    "parts": {"k": "tên phần"}}}                                 tiến độ tài liệu đổi (đầu lượt giảng, cuối lượt)
   {"type": "command", "name": "new_session" | "stop" | "repeat", "text", "reply": str | null}
@@ -130,12 +141,14 @@ class ErrorCode(StrEnum):
     BRIDGE_FAILED = "bridge_failed"
     AGENT_DISABLED = "agent_disabled"
     STUDY_DISABLED = "study_disabled"
+    TTS_SWITCHING = "tts_switching"
 
 
 def hello(topics: list[str], model: str, tts: dict | None = None, bridge: dict | None = None,
-          assistant: dict | None = None, agent: dict | None = None, study: dict | None = None) -> dict:
+          assistant: dict | None = None, agent: dict | None = None, study: dict | None = None,
+          settings: dict | None = None) -> dict:
     return {"type": "hello", "topics": topics, "model": model, "sample_rate": SAMPLE_RATE, "tts": tts,
-            "bridge": bridge, "assistant": assistant, "agent": agent, "study": study}
+            "bridge": bridge, "assistant": assistant, "agent": agent, "study": study, "settings": settings}
 
 
 def state(value: State) -> dict:
@@ -207,6 +220,10 @@ def bridge_model(model: str) -> dict:
 
 def generate_result(req_id: str, text: str | None, error: str | None, ms: int) -> dict:
     return {"type": "generate_result", "req_id": req_id, "text": text, "error": error, "ms": ms}
+
+
+def tts_switch(job: dict | None, tts: dict | None, engines: list[dict]) -> dict:
+    return {"type": "tts_switch", "job": job, "tts": tts, "engines": engines}
 
 
 def study_doc(doc: dict) -> dict:

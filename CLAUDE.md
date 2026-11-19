@@ -25,6 +25,8 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 .venv/Scripts/python bench/suggest_corrections.py             # đề xuất học từ log (giống trang /learn.html)
 .venv/Scripts/python bench/build_personal_set.py              # bộ test cá nhân _local/personal, chạy với stt_bench.py --testset
 .venv/Scripts/python bench/tts_bench.py --model zerotts --gpu --voice maichi  # benchmark TTS (35 đoạn mẫu)
+.venv/Scripts/python bench/tts_bench.py --model vieneu [--opt steps=8]     # engine có python trong [tts.<model>] chạy qua worker
+_local/venvs/vieneu/Scripts/python -m server.tts.worker --engine vieneu     # chạy worker tay (cổng 8790), [tts.vieneu] url trỏ tới
 .venv/Scripts/python bench/tts_bench.py --compare             # bảng so sánh các run TTS
 .venv/Scripts/python bench/tts_ws_client.py                   # đo DoD TTS qua /ws, server phải đang chạy
 .venv/Scripts/python bench/tts_render.py --session _local/sessions/<ngày>.jsonl --last 3  # wav A/B ngắt nghỉ cũ/mới (CPU)
@@ -42,7 +44,7 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
 - Script in tiếng Việt phải gọi `sys.stdout.reconfigure(encoding="utf-8")` đầu `main()`. Console Windows mặc định cp1252, và `python -I` bỏ qua `PYTHONIOENCODING`.
 - CTranslate2 cần `cublas64_12.dll`; `server/stt/engine.py` lấy từ `torch/lib` (torch cu128). Đừng cài CUDA toolkit riêng.
 - TTS cần `onnxruntime-gpu==1.23.2`. faster-whisper kéo `onnxruntime` bản CPU ghi đè nó; bản 1.31 cần CUDA 13 và lặng lẽ chạy CPU. Cài lại theo README nếu log server báo ZeroTTS chạy CPU. Phải `import torch` trước khi tạo session để nạp cuDNN.
-- Ứng viên TTS khác (VieNeu, OmniVoice) cài trong venv riêng `_local/venvs/<model>`, dùng chung torch của `.venv` qua file `.pth`; đừng cài vào `.venv`.
+- Ứng viên TTS khác (VieNeu, OmniVoice) cài trong venv riêng `_local/venvs/<model>`, dùng chung torch của `.venv` qua file `.pth`; đừng cài vào `.venv`. Server và bench dùng chúng qua worker (`[tts.<model>] python`), không import thẳng.
 - Đo VRAM bằng NVML (gói `nvidia-ml-py`, import tên `pynvml`), không dùng `torch.cuda`, vì CTranslate2 không cấp phát qua torch.
 - Thêm package thì ghi vào `requirements.txt` kèm version cố định. torch cài riêng theo hướng dẫn trong README.
 - Benchmark mất vài phút: chạy nền, không chạy hai job GPU cùng lúc.
@@ -56,16 +58,20 @@ Windows 11, RTX 3060 12GB, Python 3.11 trong `.venv`. Shell của Claude Code l�
   - `corrections.py`: sửa lỗi STT theo `data/corrections.tsv`.
   - `hallucination.py`: bỏ câu Whisper bịa trên tiếng ồn ("Cảm ơn các bạn đã theo dõi…"), áp vào `SttResult.text`, `raw` giữ nguyên.
   - `engine.py`: `WhisperEngine` (faster-whisper). Model trong `models/<tên>` được nhận theo tên thư mục.
+  - `engines.py` (Phase 10): `[stt] engine` (mặc định `whisper`, dùng khoá phẳng `model`/`compute_type`/`device`); engine khác hoặc `module:Lớp` lấy tham số từ `[stt.<tên>]`. `[bridge] kind` cũng nhận `module:Lớp` (lớp nhận `Config`).
   - `service.py`: `SttService`, một lượt nhận dạng theo cấu hình chốt ở Phase 1 (prompt theo chủ đề, không có chủ đề thì two_pass). Tự đọc lại glossary/corrections khi file đổi.
 - `server/tts/`: TTS (Phase 3).
   - `normalize.py`: text viết → text đọc. `clean_structure` (cắt sau `---CODE---`, code, markdown, URL) → `split_sentences` → `speakable` từng câu (lexicon `data/lexicon.tsv`, số, đơn vị, viết tắt). `prepare` trả `Segment(text, lang, source)`.
   - `splitter.py`: tách câu, không tách ở số thập phân, viết tắt, tên file.
   - Ngắt nghỉ: `normalize.PAUSES` + `pause_ms` cho `Segment.pause_ms` (phẩy để model tự ngắt, chấm/hỏi/chuyển đoạn chèn thêm, lệch ±15% theo crc32). Server gửi trong `speak_sentence.pause_ms`, web chèn khoảng lặng theo lịch phát (không gửi byte lặng). `clean_structure` giữ dòng trống thành `
 
-`; feeder có thể cắt giữa hai dấu xuống dòng nên `speak()` kiểm thêm `seam_pause`. `prosody.py`: đo nhịp từ mốc thời gian từng từ. `voicefeat.py`: cao độ/độ to/độ hơi từng câu, đo độ lệch giữa các câu (ZeroTTS lấy mẫu mỗi câu độc lập, `[tts] temperature`/`cfg_scale`).
-  - `synth.py`: `ZeroTtsEngine` (ONNX GPU, `synthesize_stream`, 48kHz), `TtsService` (tự đọc lại lexicon).
+`; feeder có thể cắt giữa hai dấu xuống dòng nên `speak()` kiểm thêm `seam_pause`. `prosody.py`: đo nhịp từ mốc thời gian từng từ. `voicefeat.py`: cao độ/độ to/độ hơi từng câu, đo độ lệch giữa các câu (ZeroTTS lấy mẫu mỗi câu độc lập, `[tts.zerotts] temperature`/`cfg_scale`).
+  - `engines/` (Phase 10): `base.py` interface `TtsEngine` (`sample_rate`, `voice`, `caps`, `voices()`, `stream(text, lang)`) + `EngineCaps`. `__init__.py` registry `ENGINES` (zerotts/vieneu/omnivoice hoặc thẳng `module:Lớp`), `create_engine`. Config: `[tts] engine` chọn, bảng `[tts.<engine>]` là tham số riêng; khoá phẳng lạ trong `[tts]` báo lỗi. `zerotts.py`: `ZeroTtsEngine` (ONNX GPU, 48kHz).
+  - `engines/remote.py` + `worker.py`: engine chạy ngoài tiến trình trong venv của model. HTTP thư viện chuẩn: `GET /info`, `POST /synth` trả frame uint32 độ dài + float32 (0 = hết câu, `ERROR_FRAME` = lỗi), đóng kết nối = huỷ. Bảng có `python` thì `RemoteTtsEngine.spawn` chạy worker (`--parent-pipe`, in `READY <port>`, log `_local/logs/tts-worker-<tên>.log`), tắt bằng đóng stdin vì python của venv là launcher; có `url` thì nối worker chạy sẵn. Worker chỉ bắt đầu đọc stdin sau khi nạp model xong: trên Windows lệnh đọc pipe đang chờ chặn mọi thao tác trên handle đó, VieNeu chạm stdin lúc nạp nên treo.
+  - `synth.py`: `TtsService` (tự đọc lại lexicon). `pause_extra` = 180ms (`REF_NATIVE_PAUSE_MS`, lặng sẵn của ZeroTTS) trừ `caps.native_pause_ms`, cộng vào mọi khoảng nghỉ để engine khác nghe ngắt như nhau.
   - `zerotts_gpu.py`: `ZeroTtsGpu`, bản ZeroTTS ít phụ thuộc CPU (máy bận thì TTS không giật). `local_frame_decode` chạy CUDA Graph bằng bản graph đã sửa trong `models/zerotts-graph/` (tự tạo bằng gói `onnx`, tạo lại khi model đổi), KV cache/state codec giữ trên GPU qua IOBinding. Audio phải trùng bản gốc tới từng mẫu: `GPU_TESTS=1 pytest tests/test_tts_gpu.py` (tắt server trước). Lỗi gì cũng tự quay về chạy thường. Server đặt priority `high` (`[server] priority`).
 - `server/`: voice server FastAPI (Phase 2). `protocol.py` là nguồn duy nhất định nghĩa message WebSocket; sửa protocol thì sửa cả `web/app.js`. `app.py` có `create_app(cfg, engine_factory, tts_factory, bridge_factory, vad_factory)` để test thay engine giả (`tests/test_server.py`); `Config.tts_enabled` mặc định tắt, `Config.bridge_kind` mặc định `"none"`; `server/config.toml` bật cả hai. STT và TTS mỗi bên một khoá GPU riêng. `turnlog.py` ghi log lượt nói và bản sửa tay.
+  - `tts_switch.py`: `TtsSwitcher` giữ model TTS (`app.state.tts`, `Session.tts` chỉ đọc lại) và đổi model khi server đang chạy (tab Cài đặt, message `tts_switch`): dừng mọi phiên (`halt_for_switch`), giữ `tts_lock`, tắt model cũ trước rồi mới nạp model mới (không giữ hai model trên VRAM), đọc thử; lỗi thì nạp lại model cũ. Trong lúc đổi, Session từ chối message trong `BLOCKED` (`tts_switching`) và bỏ frame mic. Lựa chọn lưu `[server] settings_file` (`_local/settings.json`), đọc lại lúc khởi động. `Config.settings_file` mặc định None để test không ghi file; test dùng engine giả mang tên (`tests/test_tts_switch.py`).
   - `learning.py`: vòng tự học (T-007): đề xuất thuật ngữ/rule từ bản sửa tay, kiểm tra, áp dụng vào `data/`. `learn_api.py` là REST `/api/learn` cho `web/learn.html`.
   - Lượt nói chia dev/holdout cố định bằng `split_of(turn_id)`; chỉ lượt dev sinh đề xuất, giống quy tắc đo đạc bên dưới.
   - `bridge/`: hỏi Claude (Phase 4, T-009). `base.py` là interface `Bridge.ask() -> TextDelta | Done`, huỷ bằng cách huỷ task / đóng generator. `claude_cli.py` gọi `claude -p --output-format stream-json`, `clipboard.py` (Win32 clipboard + hotkey qua ctypes), `feeder.py` cắt câu từ stream cho TTS, `asklog.py` ghi `_local/sessions`. Test dùng `FakeBridge` qua `bridge_factory` hoặc script `claude` giả (`tests/test_bridge.py`), không gọi Claude thật.

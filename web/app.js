@@ -53,6 +53,11 @@ const ui = {
   mapFit: $("map-fit"), mapZoomIn: $("map-zoom-in"), mapEmpty: $("map-empty"), mapEmptyText: $("map-empty-text"),
   mapMake: $("map-make"), mapView: $("map-view"), mapDetail: $("map-detail"), mapDetailClose: $("map-detail-close"),
   mapPath: $("map-path"), mapNode: $("map-node"), mapNote: $("map-note"), mapActions: $("map-actions"),
+  ttsOff: $("tts-off"), ttsEngines: $("tts-engines"), bridgeModelOff: $("bridge-model-off"), sttInfo: $("stt-info"),
+  switchDlg: $("switch-dlg"), switchTitle: $("switch-title"), switchText: $("switch-text"),
+  switchCancel: $("switch-cancel"), switchOk: $("switch-ok"),
+  waitDlg: $("switch-wait"), waitTitle: $("wait-title"), waitBar: $("wait-bar"), waitNote: $("wait-note"),
+  waitSteps: $("wait-steps"), waitError: $("wait-error"), waitClose: $("wait-close"),
 };
 
 // Công việc giao cho VS Code (khai báo sớm vì showTab cần biết tính năng có bật không).
@@ -72,11 +77,15 @@ const study = { info: undefined, docs: [], docId: localStorage.getItem("studyDoc
   manual: false, dragging: false, subjects: [], exams: [], subject: localStorage.getItem("studySubject"),
   map: null, mapStack: [], mapTimer: 0 };
 
-// ---------- Tab: #mimi (mặc định) / #tasks / #study / #detail, một trang để dùng chung WebSocket và mic ----------
+// Tab Cài đặt. engines: hello.settings.tts_engines; job: lần đổi model TTS đang chạy (message tts_switch), null = không.
+// pick: engine đang hỏi xác nhận. jobAt: lúc nhận bước hiện tại (performance.now) để thanh chờ chạy dần trong bước.
+const settings = { engines: [], job: null, pick: null, jobAt: 0, timer: 0, closeTimer: 0 };
+
+// ---------- Tab: #mimi (mặc định) / #tasks / #study / #detail / #settings, một trang để dùng chung WebSocket và mic ----------
 
 function currentTab() {
   const h = location.hash.slice(1);
-  if (h === "detail") return "detail";
+  if (h === "detail" || h === "settings") return h;
   if (h === "tasks" && tasks.info !== null) return "tasks"; // chưa có hello thì cứ hiện, hello báo tắt thì về Mimi
   if (h === "study" && study.info !== null) return "study";
   return "mimi";
@@ -118,7 +127,7 @@ function refreshTalkButton() {
   ui.ask.disabled = !(open && bridge.info);
   ui.mimiInput.disabled = ui.ask.disabled;
   ui.newSession.disabled = !(open && bridge.info?.kind === "claude_cli");
-  ui.bridgeModel.disabled = !open;
+  ui.bridgeModel.disabled = !(open && bridge.info?.models?.length);
   ui.speakStop.disabled = !(player.active || bridge.asking);
   ui.mimiStop.disabled = ui.speakStop.disabled;
   ui.hfToggle.disabled = !(open && mic.ready);
@@ -198,7 +207,11 @@ function connect() {
   };
 }
 
+// Message server từ chối khi đang đổi model giọng đọc (server/tts_switch.BLOCKED)
+const SWITCH_BLOCKED = new Set(["start", "speak", "ask", "tts_switch"]);
+
 function send(msg) {
+  if (switching() && SWITCH_BLOCKED.has(msg?.type)) return;
   if (ws?.readyState === WebSocket.OPEN) ws.send(typeof msg === "string" || msg instanceof ArrayBuffer ? msg : JSON.stringify(msg));
 }
 
@@ -207,8 +220,8 @@ function onServerMessage(msg) {
     case "hello":
       fillTopics(msg.topics);
       document.title = `Voice Study Assistant — ${msg.model}`;
-      player.tts = msg.tts;
-      ui.speakStatus.textContent = msg.tts ? `giọng ${msg.tts.voice}` : "Server đang tắt TTS ([tts] enabled trong server/config.toml).";
+      setTts(msg.tts);
+      onSettingsHello(msg.settings);
       bridge.info = msg.bridge;
       showBridge(msg.bridge?.session_id);
       fillModels(msg.bridge);
@@ -277,6 +290,11 @@ function onServerMessage(msg) {
     case "study_doc":
       onStudyDoc(msg.doc);
       break;
+    case "tts_switch":
+      settings.engines = msg.engines;
+      setTts(msg.tts);
+      onSwitchJob(msg.job);
+      break;
     case "bridge_model":
       if (bridge.info) bridge.info.model = msg.model;
       ui.bridgeModel.value = msg.model;
@@ -302,6 +320,7 @@ function onServerMessage(msg) {
         bridge_failed: `Không hỏi được Claude: ${msg.message}`,
         agent_disabled: "Server chưa bật giao việc cho VS Code ([agent] enabled trong server/config.toml).",
         study_disabled: "Tab Học bài cần [bridge] kind = \"claude_cli\" trong server/config.toml.",
+        tts_switching: "Đang đổi model giọng đọc, chờ xong đã.",
       }[msg.code] ?? `${msg.code}: ${msg.message}`);
       break;
   }
@@ -417,7 +436,7 @@ addEventListener("keydown", resumeAudio, true);
 // ---------- Push-to-talk ----------
 
 function beginTalk() {
-  if ((state !== "IDLE" && state !== "WAITING_CLAUDE") || ui.talk.disabled) return;
+  if ((state !== "IDLE" && state !== "WAITING_CLAUDE") || ui.talk.disabled || switching()) return;
   resumeAudio();
   ensurePlayer(); // tạo AudioContext ngay trong thao tác người dùng, để câu trả lời phát được
   stopPlayback(); // nói chen ngang: server tự dừng hỏi + dừng đọc khi nhận start, client tắt tiếng ngay
@@ -993,6 +1012,7 @@ function showBridge(sessionId) {
 function fillModels(b) {
   const models = b?.models ?? [];
   ui.bridgeModel.hidden = !models.length;
+  ui.bridgeModelOff.hidden = !!models.length;
   ui.bridgeModel.replaceChildren(...["", ...models].map((m) => new Option(m || "model mặc định", m)));
   if (models.length) ui.bridgeModel.value = b.model ?? "";
 }
@@ -2471,6 +2491,154 @@ async function refreshLearnCount() {
     ui.learnCount.hidden = n === 0;
   } catch { /* server chưa chạy: bỏ qua */ }
 }
+
+// ---------- Cài đặt: đổi model giọng đọc (server/tts_switch.py), model Claude, thông tin STT ----------
+
+const switching = () => settings.job?.status === "running";
+
+// Model TTS đang dùng (hello.tts, tts_switch.tts). null = server tắt TTS hoặc đang đổi model
+function setTts(tts) {
+  player.tts = tts;
+  ui.speakStatus.textContent = tts ? `giọng ${tts.voice} (${tts.label ?? tts.engine})`
+    : settings.engines.length ? "Chưa có model giọng đọc, chọn ở tab Cài đặt."
+    : "Server đang tắt TTS ([tts] enabled trong server/config.toml).";
+  renderSettings();
+  refreshTalkButton();
+}
+
+function onSettingsHello(s) {
+  settings.engines = s?.tts_engines ?? [];
+  const stt = s?.stt;
+  ui.sttInfo.textContent = stt ? `${stt.engine === "whisper" ? "Whisper" : stt.engine} ${stt.model} trên ${stt.device}. `
+    + "Đổi trong bảng [stt] của server/config.toml rồi khởi động lại server." : "";
+  setTts(player.tts); // engines vừa có: cập nhật dòng trạng thái
+  onSwitchJob(s?.tts_switch ?? null);
+}
+
+function renderSettings() {
+  ui.ttsOff.hidden = settings.engines.length > 0;
+  const current = player.tts?.engine;
+  ui.ttsEngines.replaceChildren(...settings.engines.map((e) => {
+    const on = e.name === current;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `engine-card${on ? " current" : ""}`;
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", on);
+    b.disabled = !e.available;
+    const name = document.createElement("span");
+    name.className = "engine-name";
+    name.textContent = e.label;
+    const badge = document.createElement("span");
+    badge.className = "engine-badge";
+    badge.textContent = on ? "Đang dùng" : e.available ? "" : "Chưa cài";
+    badge.hidden = !badge.textContent;
+    const note = document.createElement("span");
+    note.className = "engine-note";
+    note.textContent = on ? `giọng ${player.tts.voice} · ${player.tts.sample_rate / 1000} kHz · ${e.note}` : e.note;
+    b.append(name, badge, note);
+    b.onclick = () => !on && askSwitch(e);
+    return b;
+  }));
+}
+
+function askSwitch(engine) {
+  if (switching() || ws?.readyState !== WebSocket.OPEN) return;
+  const cur = settings.engines.find((e) => e.name === player.tts?.engine)?.label;
+  settings.pick = engine.name;
+  ui.switchTitle.textContent = `Chuyển giọng đọc sang ${engine.label}?`;
+  ui.switchText.textContent = (cur ? `Đang dùng ${cur}. ` : "")
+    + `Mimi sẽ dừng câu đang đọc và câu đang trả lời, ${cur ? `tắt ${cur} rồi ` : ""}nạp ${engine.label} `
+    + `(${engine.note}). Trong lúc nạp, mọi tab phải chờ; nạp lỗi thì Mimi quay lại model cũ.`;
+  ui.switchDlg.showModal();
+  ui.switchOk.focus();
+}
+
+ui.switchOk.onclick = () => {
+  ui.switchDlg.close();
+  if (settings.pick) send({ type: "tts_switch", engine: settings.pick });
+  settings.pick = null;
+};
+ui.switchCancel.onclick = () => ui.switchDlg.close();
+ui.switchDlg.addEventListener("click", (e) => {
+  if (e.target === ui.switchDlg) ui.switchDlg.close(); // bấm ra ngoài hộp
+});
+
+// Lần đổi model (mọi tab cùng nhận). running: lớp chờ chặn thao tác; done: báo xong rồi tự đóng; failed: chờ bấm Đóng
+function onSwitchJob(job) {
+  clearTimeout(settings.closeTimer);
+  settings.job = job;
+  settings.jobAt = performance.now();
+  if (!job) {
+    // hello lúc không đổi gì (server khởi động lại giữa chừng): gỡ lớp chờ, trừ khi đang hiện lỗi chờ bấm Đóng
+    if (ui.waitDlg.open && ui.waitClose.hidden) closeWait();
+    return;
+  }
+  if (job.status === "running") {
+    stopPlayback();
+    bridge.asking = false;
+    if (ui.switchDlg.open) ui.switchDlg.close();
+  }
+  if (!ui.waitDlg.open) ui.waitDlg.showModal();
+  if (!settings.timer) settings.timer = setInterval(tickWait, 200);
+  renderWait();
+  if (job.status === "done") settings.closeTimer = setTimeout(closeWait, 1500);
+  refreshTalkButton();
+}
+
+function closeWait() {
+  clearInterval(settings.timer);
+  settings.timer = 0;
+  if (switching()) return;
+  ui.waitDlg.close();
+}
+
+// Thanh và số giây: chạy theo nhịp timer. Danh sách bước chỉ dựng lại khi có message (giữ spinner chạy liền)
+function tickWait() {
+  const job = settings.job;
+  if (!job) return;
+  const n = job.steps.length;
+  const running = job.status === "running";
+  const t = (performance.now() - settings.jobAt) / 1000;
+  // Server chỉ báo khi sang bước mới: trong một bước thanh vẫn chạy dần (chậm dần, không chạm bước sau)
+  const tau = /^Nạp/.test(job.steps[job.step] ?? "") ? 20 : 2;
+  const frac = running ? Math.min(0.95, 1 - Math.exp(-t / tau)) : 0;
+  const pct = job.status === "done" ? 100 : Math.min(100, ((Math.min(job.step, n) + frac) / n) * 100);
+  ui.waitBar.style.width = `${pct}%`;
+  ui.waitBar.parentElement.classList.toggle("busy", running);
+  ui.waitBar.parentElement.classList.toggle("failed", job.status === "failed");
+  const secs = Math.round((job.elapsed_s ?? 0) + (running ? t : 0));
+  ui.waitNote.textContent = running ? `Bước ${Math.min(job.step + 1, n)}/${n} · ${secs}s · Mimi tạm không nghe và không đọc.`
+    : job.status === "done" ? `Xong sau ${secs}s.` : "";
+}
+
+function renderWait() {
+  const job = settings.job;
+  if (!job) return;
+  const n = job.steps.length;
+  ui.waitTitle.textContent = job.status === "running" ? `Đang chuyển sang ${job.label}…`
+    : job.status === "done" ? `Đã chuyển sang ${job.label}` : `Không chuyển được sang ${job.label}`;
+  tickWait();
+  ui.waitSteps.replaceChildren(...job.steps.map((name, i) => {
+    const li = document.createElement("li");
+    li.textContent = name;
+    const lostAll = job.status === "failed" && i === n - 1 && !player.tts; // nạp lại model cũ cũng lỗi
+    li.className = i === job.failed_step || lostAll ? "bad"
+      : i < job.step || job.status !== "running" ? "done" : i === job.step ? "now" : "";
+    return li;
+  }));
+  ui.waitError.textContent = job.error ?? "";
+  ui.waitError.hidden = !job.error;
+  ui.waitClose.hidden = job.status !== "failed";
+}
+
+ui.waitClose.onclick = () => {
+  settings.job = null;
+  closeWait();
+};
+// Esc không đóng được lớp chờ khi đang đổi (trình duyệt có lúc vẫn đóng: mở lại ngay)
+ui.waitDlg.addEventListener("cancel", (e) => switching() && e.preventDefault());
+ui.waitDlg.addEventListener("close", () => switching() && ui.waitDlg.showModal());
 
 // ---------- Khởi động ----------
 

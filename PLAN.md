@@ -371,16 +371,17 @@ AI-assistent/
 > Hiện trạng: TTS đã có interface ngầm (`sample_rate`, `stream(text, lang)`, `voices()`) và `tts_factory` trong `create_app`, nhưng (1) VieNeu/OmniVoice phải ở venv riêng nên không nạp được vào tiến trình server; (2) nhiều giả định của ZeroTTS rò ra ngoài: lặng sẵn ~180ms trong `PAUSES`, chunking, `temperature`/`cfg_scale`, `[tts]` phẳng; (3) `bench/tts_bench.py` chép adapter riêng thay vì dùng chung; (4) `app.py` ~750 dòng trộn WebSocket, điều phối lượt nói, vòng đọc TTS, rảnh tay, giao việc, học bài.
 
 ### TODO
-- [ ] Interface `TtsEngine` chung (`server/tts/engines/`): `sample_rate`, `voices()`, `stream(text, lang)`, khả năng (`streaming`, `native_pause_ms`, `normalizes_text`, `voice_clone`); registry theo tên, `[tts] engine = "zerotts"` + bảng `[tts.zerotts]` cho tham số riêng
-- [ ] TTS worker ngoài tiến trình: `python -m server.tts.worker --engine vieneu` chạy trong venv của model, stream PCM qua WebSocket/HTTP; `RemoteTtsEngine` trong server nối tới worker, đổi model = đổi config, không khởi động lại server chính
-- [ ] `bench/tts_bench.py`, `tts_consistency.py`, `tts_render.py` dùng chung registry, so mọi model bằng cùng thước đo (độ trễ, giật, độ đều giọng, WER khi cho Whisper nghe lại)
-- [ ] Làm tương tự cho STT (`SttService`) và AI (`Bridge` đã có interface): cấu hình chọn nguồn, test bằng engine giả như hiện nay
+- [x] Interface `TtsEngine` chung (`server/tts/engines/`): `sample_rate`, `voices()`, `stream(text, lang)`, khả năng (`streaming`, `native_pause_ms`, `normalizes_text`, `voice_clone`); registry theo tên, `[tts] engine = "zerotts"` + bảng `[tts.zerotts]` cho tham số riêng. Xong 17/11/2026: zerotts, vieneu, omnivoice, hoặc thẳng `module:Lớp`; `TtsService` bù phần lặng sẵn chênh với ZeroTTS (`REF_NATIVE_PAUSE_MS` 180) để khoảng nghỉ nghe được không đổi
+- [x] TTS worker ngoài tiến trình: `python -m server.tts.worker --engine vieneu` chạy trong venv của model, stream PCM qua WebSocket/HTTP; `RemoteTtsEngine` trong server nối tới worker, đổi model = đổi config, không khởi động lại server chính. Xong: HTTP thư viện chuẩn (frame float32, đóng kết nối = huỷ); bảng có `python` thì server tự chạy worker cùng priority và tắt theo (stdin đóng), có `url` thì nối worker chạy tay. ZeroTTS CPU qua worker: tiếng đầu p50 184ms, trong tiến trình 198ms (worker không làm chậm thêm)
+- [x] `bench/tts_bench.py`, `tts_consistency.py`, `tts_render.py` dùng chung registry, so mọi model bằng cùng thước đo (độ trễ, giật, độ đều giọng, WER khi cho Whisper nghe lại). Xong phần dùng chung: bỏ 3 adapter, chung cờ `--model/--opt/--inproc`, tham số từ `[tts.<model>]`, đo thêm lặng đầu + cuối câu (ZeroTTS 168ms, khớp số 180 đang giả định); `tts_consistency` gộp nhiều engine vào một bảng. Còn: WER khi Whisper nghe lại cho mọi engine
+- [x] Làm tương tự cho STT (`SttService`) và AI (`Bridge` đã có interface): cấu hình chọn nguồn, test bằng engine giả như hiện nay. Xong: `[stt] engine` (`server/stt/engines.py`; whisper dùng khoá phẳng cũ, engine khác bảng `[stt.<tên>]`), `[bridge] kind` nhận thêm `module:Lớp`
+- [x] Đổi model TTS trên web (18/11/2026): tab Cài đặt (icon bánh răng) liệt kê các bảng `[tts.<tên>]` (venv chưa cài thì không cho chọn); bấm model khác → hộp xác nhận → lớp chờ có thanh tiến trình theo bước (dừng câu đang đọc, tắt model cũ để trả VRAM, nạp model mới, đọc thử), chặn thao tác ở mọi tab tới khi xong. Nạp lỗi thì nạp lại model cũ. Lựa chọn lưu `_local/settings.json` ([server] settings_file), ghi đè `[tts] engine` ở lần khởi động sau. Chọn model Claude cũng chuyển sang tab này. `server/tts_switch.py`, message `tts_switch`, test `tests/test_tts_switch.py`
 - [ ] Tách `app.py`: lớp WebSocket/protocol, lớp điều phối lượt nói (STT → route → bridge → feeder → TTS), các tính năng (rảnh tay, giao việc, học bài) gọi qua interface
-- [ ] Thử VieNeu v3 Turbo và OmniVoice trên luồng thật, chọn theo số đo
+- [ ] Thử VieNeu v3 Turbo và OmniVoice trên luồng thật, chọn theo số đo. Đo trên GPU qua worker 18/11/2026 (35 đoạn): VieNeu RTF 0.51, tiếng đầu p50 153ms / max 270ms, VRAM 1.6GB, nạp 14s, lặng sẵn 227ms; OmniVoice (16 bước, không stream) RTF 0.27, tiếng đầu p50 930ms / max 1.3s, VRAM 4GB, nạp 13s (có `ref_text` thì không phải chạy Whisper nhận dạng file mẫu, trước là 78s), lặng sẵn 386ms; ZeroTTS GPU tiếng đầu 82ms. `native_pause_ms` thay bằng số đo. Sửa worker treo khi server tự chạy: luồng đọc stdin (`--parent-pipe`) chặn mọi thao tác trên handle đó ở Windows, VieNeu chạm stdin lúc nạp nên treo; giờ chỉ đọc stdin sau khi nạp xong. Còn: nghe so giọng, đo độ đều giọng (`tts_consistency.py`) và WER khi Whisper nghe lại, chọn model
 
 ### DoD
 - [ ] Đổi TTS giữa ZeroTTS và ít nhất một model khác chỉ bằng `server/config.toml`, không sửa code
-- [ ] Model ở venv riêng chạy được qua worker, tiếng đầu vẫn ≤ 1.5s
+- [x] Model ở venv riêng chạy được qua worker, tiếng đầu vẫn ≤ 1.5s. Xong 18/11/2026: VieNeu tiếng đầu p50 153ms, OmniVoice 930ms (max 1.3s)
 - [ ] Toàn bộ test hiện có vẫn qua; bench TTS không còn adapter chép riêng
 
 ---
@@ -399,4 +400,4 @@ AI-assistent/
 | 7 | Dùng từ mọi thiết bị | 🟡 18/10/2026 — dùng được trong LAN qua HTTPS 8766, có PWA + giữ màn hình sáng; từ xa (4G) chưa làm |
 | 8 | Tự học dài hạn | 🟡 01/11/2026 — có kế hoạch (thêm D: hiểu ý giao việc); D: nút Sai dự án, trả lời "ừ / cái thứ hai / sai rồi", ghi nhãn intents; lexicon thêm TODO, README, PLAN.md… |
 | 9 | Giao việc cho VS Code | 🟡 01/11/2026 — A1 + A2 + giao việc bằng giọng nói code xong (T-011); thử thật lần 1: sửa cắt tên, lọc câu ảo giác, hỏi lại khi "mở X" không rõ |
-| 10 | Tách service, đổi nguồn TTS/STT/AI | ⬜ 17/11/2026 — đã lên kế hoạch; ZeroTTS tạm dùng cfg_scale 1.5 |
+| 10 | Tách service, đổi nguồn TTS/STT/AI | 🟡 17/11/2026 — registry TTS/STT/AI theo config, worker TTS ngoài tiến trình, bench dùng chung; 18/11/2026: đổi model TTS ở tab Cài đặt trên web, đo VieNeu/OmniVoice trên GPU qua worker (đạt tiếng đầu ≤ 1.5s); còn tách app.py, nghe so giọng và chọn model |

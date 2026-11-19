@@ -1,10 +1,11 @@
-"""Benchmark TTS (Phase 3): sinh audio cho bench/tts_samples.txt bằng từng model, đo tốc độ và VRAM.
+"""Benchmark TTS: sinh audio cho bench/tts_samples.txt bằng từng engine, đo tốc độ, VRAM, lặng đầu/cuối câu.
 
-Mỗi model cài trong venv riêng ở _local/venvs/<model> (dùng chung torch của .venv qua file .pth),
-nên chạy script bằng python của venv đó:
+Engine lấy từ registry server/tts/engines, tham số từ bảng [tts.<model>] của server/config.toml (cờ dòng lệnh
+ghi đè). Bảng có `python` (venv riêng) thì engine chạy trong worker ngoài tiến trình, như trên server:
 
-    _local/venvs/vieneu/Scripts/python bench/tts_bench.py --model vieneu
-    _local/venvs/vieneu/Scripts/python bench/tts_bench.py --model vieneu --raw   # để model tự chuẩn hoá
+    .venv/Scripts/python bench/tts_bench.py --model zerotts --gpu --voice maichi
+    .venv/Scripts/python bench/tts_bench.py --model vieneu                      # qua worker trong venv vieneu
+    .venv/Scripts/python bench/tts_bench.py --model vieneu --opt temperature=0.6 --raw
     .venv/Scripts/python bench/tts_bench.py --compare                           # bảng so sánh
     .venv/Scripts/python bench/tts_bench.py --rate-page                         # trang chấm mù 1-5
 
@@ -47,94 +48,109 @@ def load_samples() -> list[dict]:
     return out
 
 
-# ---------- adapter cho từng model ----------
-# Mỗi adapter có sample_rate và stream(text, lang) -> iterator các mẩu float32.
+# ---------- engine ----------
 
-class VieNeu:
-    def __init__(self, args):
-        from vieneu import Vieneu
-        self.tts = Vieneu("v3turbo")
-        self.sample_rate = self.tts.sample_rate
-        self.voice = args.voice
-        print("Giọng có sẵn:", [v[0] if isinstance(v, tuple) else v for v in self.tts.list_preset_voices()])
-
-    def stream(self, text: str, lang: str):
-        yield from self.tts.infer_stream(text, voice=self.voice)
+SILENCE = 0.01   # biên độ dưới mức này (~-40 dBFS) coi là lặng
 
 
-class OmniVoiceVi:
-    """OmniVoice fine-tune tiếng Việt. Không stream: cả câu sinh xong mới có audio.
-    Không có giọng cố định, nên clone từ file mẫu (mặc định lấy đoạn c01 của run vieneu)."""
-
-    REPO = "splendor1811/omnivoice-vietnamese"
-
-    def __init__(self, args):
-        import torch
-        from omnivoice import OmniVoice, OmniVoiceGenerationConfig
-        self.model = OmniVoice.from_pretrained(self.REPO, device_map="cuda:0", dtype=torch.float16)
-        self.sample_rate = self.model.sampling_rate
-        ref = Path(args.ref) if args.ref else OUT_DIR / "vieneu" / "c01.wav"
-        # File mẫu sinh từ tts_samples thì lấy text theo id; file khác thì để model tự nhận dạng
-        ref_text = next((s["text"] for s in load_samples() if s["id"] == ref.stem), None)
-        self.prompt = self.model.create_voice_clone_prompt(ref_audio=str(ref), ref_text=ref_text)
-        self.config = OmniVoiceGenerationConfig(num_step=args.steps)
-
-    def stream(self, text: str, lang: str):
-        yield self.model.generate(text=text, language="vietnamese" if lang == "vi" else "english",
-                                  voice_clone_prompt=self.prompt, generation_config=self.config)[0]
+def edge_silence_ms(audio: np.ndarray, sr: int) -> float:
+    """Lặng đầu + cuối một câu (ms): số đo cho EngineCaps.native_pause_ms."""
+    loud = np.flatnonzero(np.abs(audio) > SILENCE)
+    if not len(loud):
+        return len(audio) * 1000 / sr
+    return (loud[0] + len(audio) - 1 - loud[-1]) * 1000 / sr
 
 
-class ZeroTTS:
-    """ZeroTTS: ONNX chạy CPU, có stream, giọng có sẵn (mặc định maichi)."""
-
-    def __init__(self, args):
-        from zerotts import ZeroTTS as Z
-        providers = None
-        if args.gpu:
-            import torch  # noqa: F401  nạp cuDNN/cuBLAS trong torch/lib cho onnxruntime-gpu
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        self.tts = Z.from_pretrained("zeroweight-ai/ZeroTTS", providers=providers, intra_op_num_threads=args.threads)
-        print("Provider:", self.tts.prefix_step_sess.get_providers())
-        self.sample_rate = self.tts.sample_rate
-        self.voice = args.voice or "maichi"
-        print("Giọng có sẵn:", self.tts.list_voices())
-
-    def stream(self, text: str, lang: str):
-        for chunk in self.tts.synthesize_stream(text, voice=self.voice):
-            yield chunk[0]
+def parse_opt(item: str) -> tuple[str, object]:
+    """--opt key=value: value đọc như TOML (số, true/false, "chuỗi"), không được thì để chuỗi."""
+    import tomllib
+    key, _, value = item.partition("=")
+    try:
+        return key.strip(), tomllib.loads(f"v = {value}")["v"]
+    except tomllib.TOMLDecodeError:
+        return key.strip(), value
 
 
-ADAPTERS = {"vieneu": VieNeu, "omnivoice": OmniVoiceVi, "zerotts": ZeroTTS}
+def add_engine_args(ap: argparse.ArgumentParser) -> None:
+    """Cờ chọn engine, dùng chung cho các bench TTS (tts_bench, tts_consistency, tts_render)."""
+    ap.add_argument("--model", help="engine trong server/tts/engines (zerotts, vieneu, omnivoice) hoặc module:Lớp; "
+                                    "mặc định [tts] engine của config")
+    ap.add_argument("--voice", help="tên giọng có sẵn của model")
+    ap.add_argument("--ref", help="file wav giọng mẫu để clone (omnivoice, vieneu)")
+    ap.add_argument("--steps", type=int, help="omnivoice: số bước giải mã")
+    ap.add_argument("--threads", type=int, help="zerotts: số luồng CPU cho ONNX")
+    ap.add_argument("--device", help="cuda / cpu")
+    ap.add_argument("--gpu", action="store_true", help="= --device cuda")
+    ap.add_argument("--opt", action="append", default=[], metavar="KEY=VALUE", help="tham số engine bất kỳ, lặp được")
+    ap.add_argument("--inproc", action="store_true", help="nạp engine trong tiến trình này, bỏ qua worker")
+
+
+def engine_options(args, default_device: str | None = None) -> tuple[dict, dict]:
+    """(tham số đầy đủ: bảng [tts.<model>] + ghi đè, phần ghi đè từ dòng lệnh để đặt tên run).
+    default_device: dùng khi không có --device/--gpu (None = theo config)."""
+    import inspect
+
+    from server.config import load_config
+    from server.tts.engines import engine_class
+    cfg = load_config()
+    args.model = args.model or cfg.tts_engine
+    options = dict(cfg.tts_engines.get(args.model, {}))
+    device = "cuda" if args.gpu else args.device or default_device
+    over = {k: v for k, v in (("voice", args.voice), ("ref", args.ref), ("steps", args.steps),
+                              ("threads", args.threads), ("device", device)) if v}
+    over.update(parse_opt(o) for o in args.opt)
+    options.update(over)
+    # Giọng mẫu lấy từ tts_samples (vd _local/tts/vieneu/c01.wav) thì có sẵn text, khỏi để model tự nhận dạng
+    if options.get("ref") and not options.get("ref_text") \
+            and "ref_text" in inspect.signature(engine_class(args.model)).parameters:
+        options["ref_text"] = next((s["text"] for s in load_samples() if s["id"] == Path(options["ref"]).stem), "")
+    return options, over
+
+
+def make_engine(args, default_device: str | None = None):
+    """Engine theo cờ dòng lệnh. Bảng có `python` thì chạy worker (nhớ gọi close() để tắt)."""
+    from server.tts.engines import create_engine
+    options, _ = engine_options(args, default_device)
+    return create_engine(args.model, options, local=args.inproc)
 
 
 # ---------- chạy ----------
 
-def synth_sample(model, sample: dict, raw: bool) -> tuple[np.ndarray, float, float]:
-    """Trả (audio, giây tới mẩu audio đầu, tổng giây tổng hợp)."""
+def synth_sample(model, sample: dict, raw: bool) -> tuple[np.ndarray, float, float, list[float]]:
+    """Trả (audio, giây tới mẩu audio đầu, tổng giây tổng hợp, lặng đầu + cuối từng câu ms)."""
     if raw:
         segments = [(sample["text"], "vi")]
     else:
         segments = [(s.text, s.lang) for s in prepare(sample["text"])]
     gap = np.zeros(int(GAP_S * model.sample_rate), dtype=np.float32)
-    parts, first = [], None
+    parts, first, edges = [], None, []
     t0 = time.perf_counter()
     for i, (text, lang) in enumerate(segments):
         if i:
             parts.append(gap)
+        sent = []
         for chunk in model.stream(text, lang):
             if first is None:
                 first = time.perf_counter() - t0
-            parts.append(np.asarray(chunk, dtype=np.float32).reshape(-1))
+            sent.append(np.asarray(chunk, dtype=np.float32).reshape(-1))
+        if sent:
+            edges.append(edge_silence_ms(np.concatenate(sent), model.sample_rate))
+        parts += sent
     total = time.perf_counter() - t0
     audio = np.concatenate(parts) if parts else np.zeros(0, dtype=np.float32)
-    return audio, first or total, total
+    return audio, first or total, total, edges
 
 
 def run(args) -> None:
+    from server.tts.engines import create_engine
     samples = load_samples()
     if args.only:
         samples = [s for s in samples if s["id"] in args.only.split(",")]
-    run_name = args.model + ("-raw" if args.raw else "") + (f"-{args.voice}" if args.voice else "")         + (f"-s{args.steps}" if args.model == "omnivoice" else "")         + ((f"-t{args.threads}" + ("-gpu" if args.gpu else "")) if args.model == "zerotts" else "")
+    options, over = engine_options(args)
+    voice = over.pop("voice", None)
+    run_name = args.name or (args.model + ("-raw" if args.raw else "") + (f"-{voice}" if voice else "")
+                             + "".join(f"-{k}{v}" for k, v in sorted(over.items()))
+                             + ("-inproc" if args.inproc else ""))
     run_name = re.sub(r"[^\w.-]+", "_", run_name)
     out = OUT_DIR / run_name
     out.mkdir(parents=True, exist_ok=True)
@@ -143,25 +159,34 @@ def run(args) -> None:
     base = vram.used()
     vram.start()
     t = time.perf_counter()
-    model = ADAPTERS[args.model](args)
+    model = create_engine(args.model, options, local=args.inproc)
     load_s = time.perf_counter() - t
-    # Câu khởi động: lần gọi đầu thường chậm (dựng CUDA graph, cache), không tính vào kết quả
-    for _ in model.stream("Xin chào, đây là câu khởi động.", "vi"):
-        pass
+    try:
+        describe = getattr(model, "describe", lambda: "")()
+        print(f"Engine {args.model}: {describe}, giọng {model.voice}, {model.sample_rate}Hz")
+        print("Giọng có sẵn:", model.voices())
+        # Câu khởi động: lần gọi đầu thường chậm (dựng CUDA graph, cache), không tính vào kết quả
+        for _ in model.stream("Xin chào, đây là câu khởi động.", "vi"):
+            pass
 
-    rows = []
-    for s in samples:
-        audio, ttfa, total = synth_sample(model, s, args.raw)
-        dur = len(audio) / model.sample_rate
-        sf.write(out / f"{s['id']}.wav", audio, model.sample_rate)
-        rows.append({"id": s["id"], "group": s["group"], "ttfa": round(ttfa, 3), "synth_s": round(total, 3),
-                     "audio_s": round(dur, 2), "rtf": round(total / dur, 3) if dur else None})
-        print(f"{s['id']:4} {s['group']:5} TTFA {ttfa * 1000:6.0f}ms  RTF {rows[-1]['rtf']}  {dur:5.1f}s")
-    peak = vram.stop()
+        rows, edges = [], []
+        for s in samples:
+            audio, ttfa, total, e = synth_sample(model, s, args.raw)
+            edges += e
+            dur = len(audio) / model.sample_rate
+            sf.write(out / f"{s['id']}.wav", audio, model.sample_rate)
+            rows.append({"id": s["id"], "group": s["group"], "ttfa": round(ttfa, 3), "synth_s": round(total, 3),
+                         "audio_s": round(dur, 2), "rtf": round(total / dur, 3) if dur else None})
+            print(f"{s['id']:4} {s['group']:5} TTFA {ttfa * 1000:6.0f}ms  RTF {rows[-1]['rtf']}  {dur:5.1f}s")
+        peak = vram.stop()
+    finally:
+        if hasattr(model, "close"):
+            model.close()  # tắt worker
 
-    result = {"run": run_name, "model": args.model, "raw": args.raw, "voice": args.voice, "ref": args.ref,
+    result = {"run": run_name, "model": args.model, "raw": args.raw, "options": options, "engine": describe,
               "date": datetime.now().isoformat(timespec="seconds"), "sample_rate": model.sample_rate,
-              "load_s": round(load_s, 1), "vram_mb": round((peak - base) / 2**20), "items": rows}
+              "load_s": round(load_s, 1), "vram_mb": round((peak - base) / 2**20),
+              "edge_silence_ms": round(statistics.median(edges)) if edges else None, "items": rows}
     (out / "results.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     print_summary([result])
 
@@ -171,15 +196,18 @@ def _summary(r: dict) -> dict:
     rtf = [i["rtf"] for i in items if i["rtf"]]
     ttfa = sorted(i["ttfa"] for i in items)
     return {"run": r["run"], "n": len(items), "rtf": statistics.mean(rtf),
-            "ttfa_p50": statistics.median(ttfa), "ttfa_max": ttfa[-1], "vram": r["vram_mb"], "load": r["load_s"]}
+            "ttfa_p50": statistics.median(ttfa), "ttfa_max": ttfa[-1], "vram": r["vram_mb"], "load": r["load_s"],
+            "edge": r.get("edge_silence_ms")}
 
 
 def print_summary(results: list[dict]) -> None:
-    print(f"\n{'run':28} {'n':>3} {'RTF':>6} {'TTFA p50':>9} {'TTFA max':>9} {'VRAM MB':>8} {'load s':>7}")
+    print(f"\n{'run':28} {'n':>3} {'RTF':>6} {'TTFA p50':>9} {'TTFA max':>9} {'VRAM MB':>8} {'load s':>7} "
+          f"{'lặng ms':>8}")
     for r in results:
         s = _summary(r)
+        edge = "" if s["edge"] is None else s["edge"]
         print(f"{s['run']:28} {s['n']:3} {s['rtf']:6.3f} {s['ttfa_p50'] * 1000:7.0f}ms "
-              f"{s['ttfa_max'] * 1000:7.0f}ms {s['vram']:8} {s['load']:7}")
+              f"{s['ttfa_max'] * 1000:7.0f}ms {s['vram']:8} {s['load']:7} {edge:>8}")
 
 
 def load_results() -> list[dict]:
@@ -230,12 +258,8 @@ document.getElementById("save").onclick = () => {{
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", choices=sorted(ADAPTERS))
-    ap.add_argument("--voice", help="tên giọng có sẵn của model")
-    ap.add_argument("--ref", help="omnivoice: file wav giọng mẫu để clone (mặc định _local/tts/vieneu/c01.wav)")
-    ap.add_argument("--steps", type=int, default=16, help="omnivoice: số bước giải mã")
-    ap.add_argument("--threads", type=int, default=4, help="zerotts: số luồng CPU cho ONNX")
-    ap.add_argument("--gpu", action="store_true", help="zerotts: chạy ONNX trên CUDA (cần onnxruntime-gpu)")
+    add_engine_args(ap)
+    ap.add_argument("--name", help="tên run (mặc định ghép từ model + tham số ghi đè)")
     ap.add_argument("--raw", action="store_true", help="đưa text gốc, không qua server.tts.normalize")
     ap.add_argument("--only", help="chỉ chạy các id, cách nhau bởi dấu phẩy")
     ap.add_argument("--compare", action="store_true")

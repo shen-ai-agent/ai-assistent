@@ -6,7 +6,8 @@
 Mỗi câu chỉ tổng hợp một lần rồi ghép thành hai bản, nên hai bản chỉ khác nhau ở khoảng nghỉ:
   <tên>_cu.wav    như trước: nghỉ cố định 150ms giữa mọi câu (SENTENCE_GAP_S cũ của web)
   <tên>_moi.wav   nghỉ theo dấu câu / chuyển đoạn (normalize.pause_ms)
-Mặc định chạy CPU để không tranh GPU với server (RTF ~1); --gpu khi server đã tắt.
+Engine theo [tts] engine của config hoặc --model (cờ như bench/tts_bench.py). Mặc định chạy CPU để không tranh
+GPU với server (RTF ~1); --gpu khi server đã tắt.
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from server.tts.synth import TtsService, ZeroTtsEngine  # noqa: E402
+from bench.tts_bench import add_engine_args, make_engine  # noqa: E402
+from server.tts.synth import TtsService  # noqa: E402
 
 OUT = ROOT / "_local" / "tts_render"
 OLD_GAP_MS = 150
@@ -52,8 +54,7 @@ def main():
     ap.add_argument("--last", type=int, default=3, help="lấy N câu trả lời dài nhất trong số 3N câu cuối")
     ap.add_argument("--text")
     ap.add_argument("--name", default="text")
-    ap.add_argument("--voice", default="maichi")
-    ap.add_argument("--gpu", action="store_true")
+    add_engine_args(ap)
     args = ap.parse_args()
 
     items = []
@@ -67,8 +68,15 @@ def main():
     if not items:
         ap.error("cần --text hoặc --session")
 
-    engine = ZeroTtsEngine(args.voice, "cuda" if args.gpu else "cpu", 4)
-    svc = TtsService(engine)
+    engine = make_engine(args, default_device="cpu")
+    try:
+        render_all(TtsService(engine), items)
+    finally:
+        if hasattr(engine, "close"):
+            engine.close()
+
+
+def render_all(svc: TtsService, items: list[tuple[str, str]]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for name, text in items:
         old, new, segs = render(svc, text)

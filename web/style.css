@@ -600,3 +600,43 @@ button.link.danger { color: var(--bad); }
 @media (max-width: 480px) {
   header:has(#study-tab:not([hidden])) .nav { display: none; }
 }
+
+/* ---------- Tab Cài đặt ---------- */
+.tabs a.tab-icon { display: inline-flex; align-items: center; padding: 5px 10px; }
+.tab-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.settings-title { font-size: 18px; margin: 4px 0 12px; }
+.set-group { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.set-group h3 { margin: 0 0 4px; font-size: 15px; }
+.set-group .hint { margin: 4px 0 10px; }
+.set-group .hint:last-child { margin-bottom: 0; }
+.set-row { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.engine-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.engine-card { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; text-align: left;
+  padding: 10px 14px; background: #1c2029; color: var(--text); border: 1px solid #333a46; border-radius: 10px; }
+.engine-card:hover:not(:disabled) { border-color: var(--accent); }
+.engine-card.current { border-color: var(--accent); background: #221d36; cursor: default; }
+.engine-card:disabled { background: transparent; color: var(--muted); }
+.engine-name { font-size: 14px; font-weight: 600; }
+.engine-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #262a36; color: var(--muted); }
+.engine-card.current .engine-badge { background: var(--accent-2); color: #fff; }
+.engine-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.switch-dlg p { margin: 0; line-height: 1.5; }
+/* Lớp chờ đổi model: modal chặn mọi thao tác, thanh chạy theo bước server báo */
+.switch-wait { width: min(420px, calc(100vw - 32px)); outline: none; }
+.switch-wait::backdrop { background: #000c; backdrop-filter: blur(3px); }
+.wait-bar { height: 8px; border-radius: 4px; margin: 6px 0 8px; }
+.wait-bar > * { position: relative; overflow: hidden; transition: none; border-radius: 4px; }
+.wait-bar.busy > *::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .35), transparent); animation: shimmer 1.2s linear infinite; }
+.wait-bar.failed > * { background: var(--bad); }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.wait-steps { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.wait-steps li::before { content: "○"; display: inline-block; width: 20px; }
+.wait-steps li.done { color: var(--text); }
+.wait-steps li.done::before { content: "✓"; color: var(--ok); }
+.wait-steps li.now { color: var(--text); }
+.wait-steps li.now::before { content: ""; width: 9px; height: 9px; margin: 0 9px 0 1px; vertical-align: -1px; border-radius: 50%;
+  border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite; }
+.wait-steps li.bad { color: var(--bad); }
+.wait-steps li.bad::before { content: "✕"; }

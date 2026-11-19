@@ -5,7 +5,9 @@ câu (server/tts/voicefeat.py) và xuất wav để nghe.
     .venv/Scripts/python bench/tts_consistency.py --session ... --configs t0.8,t0.5,t0.8c1.5 --gpu
     .venv/Scripts/python bench/tts_consistency.py --compare
 
-Cấu hình viết dạng t<temperature>[c<cfg_scale>], ví dụ t0.6c1.5. Mặc định chạy CPU để không tranh GPU với server.
+Cấu hình viết dạng t<temperature>[c<cfg_scale>], ví dụ t0.6c1.5 (chỉ ZeroTTS nạp trong tiến trình; engine khác chạy
+một cấu hình như trong config, chọn bằng --model, xem bench/tts_bench.py). Mặc định chạy CPU để không tranh GPU
+với server.
 Số liệu: độ nhảy trung bình giữa hai câu kề nhau (người nghe nhận ra cái này nhất) và độ lệch chuẩn cả bài.
 Kết quả: _local/tts_consistency/<cấu hình>_s<seed>.wav và results.json.
 """
@@ -24,7 +26,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from server.tts.synth import TtsService, ZeroTtsEngine  # noqa: E402
+from bench.tts_bench import add_engine_args, make_engine  # noqa: E402
+from server.tts.synth import TtsService  # noqa: E402
 from server.tts.voicefeat import KEYS, spread, voice_features  # noqa: E402
 
 OUT = ROOT / "_local" / "tts_consistency"
@@ -93,8 +96,7 @@ def main():
     ap.add_argument("--sentences", type=int, default=16, help="lấy N câu đầu")
     ap.add_argument("--configs", default="t0.8,t0.6,t0.5,t0.8c1.5,t0.6c1.5")
     ap.add_argument("--seeds", type=int, default=2)
-    ap.add_argument("--voice", default="maichi")
-    ap.add_argument("--gpu", action="store_true")
+    add_engine_args(ap)
     ap.add_argument("--compare", action="store_true", help="in lại bảng từ results.json")
     args = ap.parse_args()
 
@@ -105,16 +107,32 @@ def main():
         ap.error("cần --session")
 
     ts, text = pick_text(args.session, args.ts)
-    engine = ZeroTtsEngine(args.voice, "cuda" if args.gpu else "cpu", 4)
+    engine = make_engine(args, default_device="cpu")
+    try:
+        run_all(args, engine, ts, text)
+    finally:
+        if hasattr(engine, "close"):
+            engine.close()
+
+
+def run_all(args, engine, ts: str, text: str) -> None:
     svc = TtsService(engine)
+    # Cấu hình lấy mẫu chỉ áp được cho ZeroTTS nạp trong tiến trình (có engine.sampling)
+    configs = args.configs.split(",") if hasattr(engine, "sampling") else [args.model]
     sr = svc.sample_rate
     segs = svc.plan(text)[:args.sentences]
     OUT.mkdir(parents=True, exist_ok=True)
-    results = {"source": f"{args.session.name} {ts}", "sentences": len(segs), "seeds": args.seeds,
-               "device": engine.provider, "texts": [s.source for s in segs], "configs": {}}
+    source, describe = f"{args.session.name} {ts}", getattr(engine, "describe", lambda: args.model)()
+    results = {"source": source, "sentences": len(segs), "seeds": args.seeds, "device": describe,
+               "texts": [s.source for s in segs], "configs": {}}
+    # Cùng câu trả lời, cùng số câu/seed: giữ kết quả cũ (engine khác) để so trong một bảng
+    old = json.loads(RESULTS.read_text(encoding="utf-8")) if RESULTS.exists() else {}
+    if (old.get("source"), old.get("sentences"), old.get("seeds")) == (source, len(segs), args.seeds):
+        results["configs"] = old.get("configs", {})
 
-    for name in args.configs.split(","):
-        engine.sampling = parse_config(name)
+    for name in configs:
+        if hasattr(engine, "sampling"):
+            engine.sampling = parse_config(name)
         runs = []
         for seed in range(args.seeds):
             audios, took = run_one(svc, segs, seed)
@@ -130,7 +148,8 @@ def main():
             import soundfile as sf
             sf.write(str(OUT / f"{name}_s{seed}.wav"), np.concatenate(parts), sr, subtype="PCM_16")
             print(f"{name} seed {seed}: {sec:.1f}s audio, RTF {took / sec:.2f}", flush=True)
-        results["configs"][name] = {"sampling": engine.sampling, "runs": runs, "summary": summarize(runs)}
+        results["configs"][name] = {"engine": describe, "sampling": getattr(engine, "sampling", None), "runs": runs,
+                                     "summary": summarize(runs)}
         RESULTS.write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
 
     print_table(results)

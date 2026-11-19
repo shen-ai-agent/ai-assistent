@@ -27,6 +27,7 @@
     <a href="#tasks" data-tab="tasks" id="tasks-tab" hidden>Công việc <span id="tasks-count" class="badge" hidden></span></a>
     <a href="#study" data-tab="study" id="study-tab" hidden>Học bài</a>
     <a href="#detail" data-tab="detail">Chi tiết</a>
+    <a href="#settings" data-tab="settings" class="tab-icon" title="Cài đặt" aria-label="Cài đặt"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
   </nav>
   <div class="status">
     <a href="learn.html" class="nav" title="Đề xuất học từ bản sửa transcript">Đề xuất <span id="learn-count" class="badge" hidden></span></a>
@@ -289,7 +290,6 @@
       <button id="speak" class="secondary" disabled>Đọc</button>
       <button id="speak-stop" class="secondary" disabled>⏹ Dừng</button>
       <button id="new-session" class="secondary" disabled title="Claude quên ngữ cảnh các câu trước">Session mới</button>
-      <select id="bridge-model" hidden disabled title="Model Claude cho các lượt sau, áp cho mọi tab"></select>
       <span id="speak-status" class="hint"></span>
     </div>
     <ol id="speak-sentences"></ol>
@@ -309,6 +309,53 @@
     <ol id="history" reversed></ol>
   </section>
 </main>
+
+<main id="tab-settings" class="tab settings" hidden>
+  <h2 class="settings-title">Cài đặt</h2>
+
+  <section class="set-group">
+    <h3>Giọng đọc</h3>
+    <p class="hint">Model đọc thành tiếng dùng chung cho mọi tab. Đổi model thì Mimi dừng câu đang đọc và tạm không
+      nghe, không đọc cho tới khi nạp xong (lần đầu có thể mất vài chục giây tới vài phút).</p>
+    <p id="tts-off" class="hint warn" hidden>Server đang tắt TTS (<code>[tts] enabled</code> trong
+      <code>server/config.toml</code>).</p>
+    <div id="tts-engines" class="engine-list" role="radiogroup" aria-label="Model giọng đọc"></div>
+    <p class="hint">Thêm model: tạo bảng <code>[tts.&lt;tên&gt;]</code> trong <code>server/config.toml</code> rồi khởi
+      động lại server. Model cần venv riêng thì cài vào <code>_local/venvs/&lt;tên&gt;</code> (xem README).</p>
+  </section>
+
+  <section class="set-group">
+    <h3>Claude</h3>
+    <label class="set-row">Model trả lời
+      <select id="bridge-model" disabled title="Model Claude cho các lượt sau, áp cho mọi tab"></select></label>
+    <p id="bridge-model-off" class="hint" hidden>Bridge hiện tại không chọn được model
+      (cần <code>[bridge] kind = "claude_cli"</code>).</p>
+  </section>
+
+  <section class="set-group">
+    <h3>Nhận dạng giọng nói</h3>
+    <p id="stt-info" class="hint"></p>
+  </section>
+</main>
+
+<!-- Đổi model giọng đọc: hỏi xác nhận, rồi lớp chờ chặn mọi thao tác tới khi server nạp xong (mọi tab cùng hiện) -->
+<dialog id="switch-dlg" class="move-dlg switch-dlg">
+  <h3 id="switch-title"></h3>
+  <p id="switch-text" class="hint"></p>
+  <div class="dlg-actions">
+    <button id="switch-cancel" type="button" class="secondary">Huỷ</button>
+    <button id="switch-ok" type="button">Chuyển</button>
+  </div>
+</dialog>
+
+<dialog id="switch-wait" class="move-dlg switch-wait">
+  <h3 id="wait-title"></h3>
+  <div class="bar wait-bar"><div id="wait-bar"></div></div>
+  <p id="wait-note" class="hint"></p>
+  <ol id="wait-steps" class="wait-steps"></ol>
+  <p id="wait-error" class="error" hidden></p>
+  <div class="dlg-actions"><button id="wait-close" type="button" hidden>Đóng</button></div>
+</dialog>
 
 <template id="turn-tpl">
   <li class="turn">

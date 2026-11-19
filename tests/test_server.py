@@ -137,6 +137,7 @@ class FakeTts:
     """Mỗi câu 3 mẩu 0.1s. gate: chặn trước mẩu thứ hai để test dừng giữa chừng."""
 
     sample_rate = 48000
+    voice = "maichi"
 
     def __init__(self, gate: threading.Event | None = None):
         self.gate = gate
@@ -171,7 +172,8 @@ def test_speak_streams_audio(tmp_path):
     with tts_client(tmp_path, tts) as client:
         assert client.get("/health").json()["tts"] is True
         with client.websocket_connect("/ws") as ws:
-            assert ws.receive_json()["tts"] == {"sample_rate": 48000, "voice": "maichi"}
+            assert ws.receive_json()["tts"] == {"sample_rate": 48000, "voice": "maichi", "engine": "zerotts",
+                                               "label": "zerotts"}
             ws.send_json({"type": "speak", "text": TWO})
             frames, sentences, planned, pauses = [], [], [], []
             while True:

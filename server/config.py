@@ -21,6 +21,10 @@ class Config:
     # Priority tiến trình trên Windows: normal / above_normal / high. TTS phải gửi kernel GPU đều đặn mỗi 80ms;
     # máy chạy nhiều app thì luồng TTS bị chen nên giọng giật (đo: high giảm số lần hụt audio 91 → 14)
     priority: str = "high"
+    # Lựa chọn ở tab Cài đặt (model TTS...), ghi đè config.toml. None = không lưu (test)
+    settings_file: Path | None = None
+    stt_engine: str = "whisper"      # server/stt/engines.STT_ENGINES; whisper dùng các khoá phẳng bên dưới
+    stt_engines: dict[str, dict] = field(default_factory=dict)   # bảng [stt.<engine>] cho engine khác
     model: str = "large-v3"
     compute_type: str = "int8_float16"
     device: str = "cuda"
@@ -35,16 +39,10 @@ class Config:
     corrections: Path = ROOT / "data" / "corrections.tsv"
     # TTS: mặc định tắt để test không load model; config.toml bật
     tts_enabled: bool = False
-    tts_voice: str = "maichi"
-    tts_device: str = "cuda"
-    tts_threads: int = 4
+    tts_engine: str = "zerotts"       # tên trong server/tts/engines.ENGINES
+    tts_engines: dict[str, dict] = field(default_factory=dict)   # bảng [tts.<engine>]: tham số riêng từng engine
     tts_loanwords: bool = False
     tts_pause_scale: float = 1.0      # nhân khoảng nghỉ giữa câu/đoạn (normalize.PAUSES), 0 = như model tự sinh
-    tts_first_chunk_frames: int = 1   # 1 frame = 80ms audio
-    tts_max_chunk_frames: int = 16
-    tts_cuda_graph: bool = True       # CUDA Graph cho local_frame_decode, đỡ giật khi CPU bận (zerotts_gpu.py)
-    tts_temperature: float = 0.8      # audio_temperature của ZeroTTS; thấp thì giọng đều hơn giữa các câu
-    tts_cfg_scale: float = 1.0        # > 1: bám chất giọng mẫu hơn, tốn gấp đôi
     # Bridge tới Claude: mặc định "none" để test không gọi Claude; config.toml chọn claude_cli/clipboard
     bridge_kind: str = "none"
     bridge_auto_ask: bool = True  # transcript xong thì tự hỏi Claude
@@ -97,17 +95,30 @@ class Config:
     study_map_timeout_s: float = 300
 
 
+    @property
+    def tts_options(self) -> dict:
+        """Tham số của engine TTS đang chọn."""
+        return self.tts_engines.get(self.tts_engine, {})
+
+
 _PATHS = ("bridge_workdir", "bridge_prompt", "bridge_log_dir")
 
 
 def load_config(path: Path = DEFAULT_PATH) -> Config:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    server, stt, log = raw.get("server", {}), raw.get("stt", {}), raw.get("log", {})
-    tts = {f"tts_{k}": v for k, v in raw.get("tts", {}).items()}
+    server, stt, log = raw.get("server", {}), dict(raw.get("stt", {})), raw.get("log", {})
+    stt_tables = {k: stt.pop(k) for k in [k for k, v in stt.items() if isinstance(v, dict)]}
+    if "engine" in stt:
+        stt["stt_engine"] = stt.pop("engine")
+    stt["stt_engines"] = stt_tables
+    tts = {f"tts_{k}": v for k, v in raw.get("tts", {}).items() if not isinstance(v, dict)}
+    tts["tts_engines"] = {k: v for k, v in raw.get("tts", {}).items() if isinstance(v, dict)}
+    if stray := [k[4:] for k in tts if k not in Config.__dataclass_fields__]:
+        raise ValueError(f"[tts] có khoá {stray} không dùng chung cho mọi engine: chuyển vào [tts.<engine>]")
     bridge = {f"bridge_{k}": v for k, v in raw.get("bridge", {}).items()}
     bridge.update({k: ROOT / bridge[k] for k in _PATHS if k in bridge})
     assistant = {f"assistant_{k}": v for k, v in raw.get("assistant", {}).items()}
-    server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key") if k in server})
+    server.update({k: ROOT / server[k] for k in ("lan_cert", "lan_key", "settings_file") if k in server})
     agent = {f"agent_{k}": v for k, v in raw.get("agent", {}).items()}
     study = {f"study_{k}": v for k, v in raw.get("study", {}).items()}
     study.update({k: ROOT / study[k] for k in ("study_dir", "study_prompt", "study_exams", "study_map_prompt",

@@ -33,12 +33,17 @@ def set_priority(name: str) -> None:
             logging.warning("priority không hợp lệ: %r (chọn %s)", name, ", ".join(_PRIORITY))
         return
     import ctypes
-    k32 = ctypes.windll.kernel32
-    k32.GetCurrentProcess.restype = ctypes.c_void_p
-    if k32.SetPriorityClass(ctypes.c_void_p(k32.GetCurrentProcess()), _PRIORITY[name]):
+    from ctypes import wintypes
+    # Bản kernel32 riêng: đặt restype/argtypes trên ctypes.windll.kernel32 (dùng chung cả tiến trình) làm hỏng
+    # chỗ khác gọi cùng hàm theo kiểu mặc định (remote._priority_flags)
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    k32.SetPriorityClass.restype = wintypes.BOOL
+    if k32.SetPriorityClass(k32.GetCurrentProcess(), _PRIORITY[name]):
         logging.info("Priority tiến trình: %s", name)
     else:
-        logging.warning("Không đặt được priority %s (lỗi Win32 %d)", name, k32.GetLastError())
+        logging.warning("Không đặt được priority %s (lỗi Win32 %d)", name, ctypes.get_last_error())
 
 
 def main():

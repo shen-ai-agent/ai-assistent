@@ -35,23 +35,23 @@ from .study import ExamProfiles, Library, MapService, StudyError, StudyService
 from .study.api import router as study_router
 from .study.mindmap import MAP_SLOTS
 from .tts.synth import TtsService, to_pcm16
+from .tts_switch import BLOCKED, TtsSwitcher, engine_list, tts_info
 from .turnlog import TurnLogger, new_turn_id
 
 log = logging.getLogger("server")
 WEB_DIR = ROOT / "web"
 
 
-def _whisper_engine(cfg: Config):
-    from .stt.engine import WhisperEngine  # import muộn: test không cần CUDA
-    return WhisperEngine(cfg.model, cfg.compute_type, cfg.device)
+def _stt_engine(cfg: Config):
+    """Engine STT theo [stt] engine (server/stt/engines). Import muộn: test không cần CUDA."""
+    from .stt.engines import create_stt_engine
+    return create_stt_engine(cfg)
 
 
-def _zerotts_engine(cfg: Config):
-    from .tts.synth import ZeroTtsEngine  # import muộn: test không cần model
-    return ZeroTtsEngine(cfg.tts_voice, cfg.tts_device, cfg.tts_threads,
-                         first_chunk_frames=cfg.tts_first_chunk_frames, max_chunk_frames=cfg.tts_max_chunk_frames,
-                         cuda_graph=cfg.tts_cuda_graph, temperature=cfg.tts_temperature,
-                         cfg_scale=cfg.tts_cfg_scale)
+def _tts_engine(cfg: Config):
+    """Engine TTS theo [tts] engine + bảng [tts.<engine>] (server/tts/engines). Import muộn: test không cần model."""
+    from .tts.engines import create_engine
+    return create_engine(cfg.tts_engine, cfg.tts_options, log_dir=cfg.log_dir)
 
 
 def _silero_session():
@@ -97,8 +97,8 @@ async def _preset_answer(text: str) -> AsyncIterator[TextDelta | Done]:
     yield Done()
 
 
-def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], object] = _whisper_engine,
-               tts_factory: Callable[[Config], object] = _zerotts_engine,
+def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], object] = _stt_engine,
+               tts_factory: Callable[[Config], object] = _tts_engine,
                bridge_factory: Callable[[Config], Bridge | None] = make_bridge,
                vad_factory: Callable[[], object] = _silero_session,
                agent_factory: Callable[[Config], tuple | None] = _vscode_agent,
@@ -108,7 +108,7 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        log.info("Đang load model %s (%s)...", cfg.model, cfg.compute_type)
+        log.info("Đang load STT %s: %s (%s)...", cfg.stt_engine, cfg.model, cfg.compute_type)
         engine = await asyncio.to_thread(engine_factory, cfg)
         stt = SttService(engine, language=cfg.language, beam_size=cfg.beam_size,
                          glossary_path=cfg.glossary, corrections_path=cfg.corrections)
@@ -121,15 +121,17 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         app.state.turnlog = TurnLogger(cfg.log_dir, cfg.save_audio)
         app.state.tts = None
         app.state.tts_lock = asyncio.Lock()
-        if cfg.tts_enabled:
-            log.info("Đang load TTS (giọng %s)...", cfg.tts_voice)
-            tts = TtsService(await asyncio.to_thread(tts_factory, cfg), loanwords=cfg.tts_loanwords,
-                             pause_scale=cfg.tts_pause_scale)
-            # Warm-up: lần chạy đầu của onnxruntime CUDA chậm (cấp phát, chọn kernel)
-            await asyncio.to_thread(lambda: [c for seg in tts.plan("Xin chào bạn.") for c in tts.stream(seg)])
-            log.info("TTS sẵn sàng (CUDA Graph: %s)", "bật" if getattr(tts.engine, "cuda_graph", False) else "tắt")
-            app.state.tts = tts
         app.state.sessions = []  # kết nối đang mở, mới nhất ở cuối
+        app.state.background = set()  # task không thuộc tab nào (đổi model TTS)
+
+        async def broadcast(msg: dict):
+            for s in list(app.state.sessions):
+                await s.send(msg)
+
+        app.state.tts_switch = None
+        if cfg.tts_enabled:
+            app.state.tts_switch = TtsSwitcher(cfg, app.state, tts_factory, broadcast)
+            await app.state.tts_switch.start()
         app.state.vad_session = await asyncio.to_thread(vad_factory)  # ONNX CPU, các phiên dùng chung
         app.state.asklog = AskLogger(cfg.bridge_log_dir)
         app.state.bridge = bridge = bridge_factory(cfg)
@@ -151,10 +153,6 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
         if parts := agent_factory(cfg):
             registry, launcher = parts
 
-            async def broadcast(msg: dict):
-                for s in list(app.state.sessions):
-                    await s.send(msg)
-
             async def notify(task, text: str):
                 sessions = app.state.sessions
                 target = task.origin if task.origin in sessions else sessions[-1] if sessions else None
@@ -173,6 +171,8 @@ def create_app(cfg: Config | None = None, engine_factory: Callable[[Config], obj
             app.state.agent.close()
         if bridge is not None and hasattr(bridge, "stop"):
             bridge.stop()
+        if app.state.tts_switch is not None:
+            app.state.tts_switch.close()  # worker TTS do server chạy
 
     app = FastAPI(title="Voice Study Assistant", lifespan=lifespan)
 
@@ -226,7 +226,6 @@ class Session:
         self.n_bytes = 0
         self.topic: str | None = None
         self.task: asyncio.Task | None = None
-        self.tts: TtsService | None = app.state.tts
         self.tts_lock: asyncio.Lock = app.state.tts_lock
         self.speak_task: asyncio.Task | None = None
         self.speak_id = 0
@@ -245,8 +244,31 @@ class Session:
         self.study_doc: str | None = None  # tài liệu đang mở ở tab Học (message study): câu hỏi đi tới gia sư
         self.generate_tasks: set[asyncio.Task] = set()  # lượt generate đang chạy, huỷ khi đóng kết nối
 
+    @property
+    def tts(self) -> TtsService | None:
+        """Model TTS đang dùng (dùng chung mọi tab, đổi được ở tab Cài đặt; None lúc đang đổi)."""
+        return self.app.state.tts
+
+    @property
+    def switching(self) -> bool:
+        sw = self.app.state.tts_switch
+        return sw is not None and sw.busy
+
+    async def halt_for_switch(self):
+        """Trước khi đổi model TTS: dừng hỏi/đọc/nhận dạng, rảnh tay về chờ gọi tên."""
+        self.cancel_task()
+        self.stop_asking()
+        self.stop_speaking()
+        self.chunks, self.n_bytes = [], 0
+        if self.hf:
+            await self.hf.reset()
+        await self.set_state(State.IDLE)
+
     async def run(self):
-        tts = {"sample_rate": self.tts.sample_rate, "voice": self.cfg.tts_voice} if self.tts else None
+        sw = self.app.state.tts_switch
+        tts = tts_info(self.cfg, self.tts)
+        settings = {"tts_engines": engine_list(self.cfg) if sw else [], "tts_switch": sw.status() if sw else None,
+                    "stt": {"engine": self.cfg.stt_engine, "model": self.cfg.model, "device": self.cfg.device}}
         bridge = self.bridge and {"kind": self.bridge.name, "auto_ask": self.cfg.bridge_auto_ask,
                                   "session_id": self.bridge.session_id, "model": getattr(self.bridge, "model", None),
                                   "models": self.cfg.bridge_models if hasattr(self.bridge, "model") else []}
@@ -254,7 +276,7 @@ class Session:
                      "active_silence_ms": self.cfg.assistant_active_silence_ms}
         agent = self.agent and {"auto_submit": self.cfg.agent_auto_submit}
         study = self.study and {"max_chars": self.cfg.study_max_chars, "maps": self.study.maps is not None}
-        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge, assistant, agent, study))
+        await self.send(P.hello(self.stt.topics(), self.cfg.model, tts, bridge, assistant, agent, study, settings))
         await self.set_state(State.IDLE)
         if self.agent:
             await self.send(P.tasks(self.agent.snapshot()))
@@ -282,6 +304,8 @@ class Session:
                 t.cancel()  # bridge kill tiến trình claude
 
     async def on_audio(self, data: bytes):
+        if self.switching:
+            return  # đang đổi model TTS: không nghe
         if self.state is not State.LISTENING:
             if self.hf:
                 await self.hf.push(data)
@@ -297,6 +321,8 @@ class Session:
             kind = msg["type"]
         except (ValueError, KeyError, TypeError):
             return await self.send(P.error(ErrorCode.BAD_MESSAGE, "Message không phải JSON hợp lệ"))
+        if kind in BLOCKED and self.switching:
+            return await self.send(P.error(ErrorCode.TTS_SWITCHING, "Đang đổi model giọng đọc, chờ xong đã"))
 
         if kind == "start":
             topic = msg.get("topic") or None
@@ -375,6 +401,8 @@ class Session:
             else:
                 self.hf = HandsFree(self, self.app.state.vad_session, topic)
                 await self.send(P.listen(self.hf.mode))
+        elif kind == "tts_switch":
+            await self.on_tts_switch(msg.get("engine"))
         elif kind == "generate":
             await self.on_generate(msg)
         elif kind == "study":
@@ -383,6 +411,19 @@ class Session:
             await self.on_task_message(kind, msg)
         else:
             await self.send(P.error(ErrorCode.BAD_MESSAGE, f"Không biết message {kind!r}"))
+
+    async def on_tts_switch(self, name):
+        """Tab Cài đặt đổi model TTS. Chạy nền: vòng nhận message vẫn chạy (cancel, đóng tab...)."""
+        sw = self.app.state.tts_switch
+        if sw is None:
+            return await self.send(P.error(ErrorCode.TTS_DISABLED, "Server đang tắt TTS"))
+        if (reason := sw.check(name)) is not None:
+            return await self.send(P.error(ErrorCode.BAD_MESSAGE, reason))
+        if name == self.cfg.tts_engine:
+            return await self.send(P.tts_switch(None, tts_info(self.cfg, self.tts), engine_list(self.cfg)))
+        task = asyncio.create_task(sw.switch(name))
+        self.app.state.background.add(task)  # không gắn với tab: đóng tab giữa chừng thì vẫn đổi xong
+        task.add_done_callback(self.app.state.background.discard)
 
     async def on_generate(self, msg: dict):
         """Message generate: lượt claude -p độc lập, chạy nền để vòng nhận message không bị chặn."""
@@ -675,15 +716,22 @@ class Session:
 
     async def speak(self, speak_id: int, queue: asyncio.Queue, on_end=None):
         """Đọc từng câu, gửi từng mẩu audio ngay khi có. Bị huỷ (speak_stop, speak mới) thì speak_end cancelled."""
+        tts = self.tts  # giữ model của lượt này: đổi model ở tab Cài đặt thì lượt bị huỷ trước
+        if tts is None:  # đang đổi model: vẫn báo hết lượt để rảnh tay / web không chờ mãi
+            await self.send(P.speak_start(speak_id))
+            await self.send(P.speak_end(speak_id, True, None, 0, 0))
+            if on_end:
+                await on_end(True, None, 0, 0)
+            return
         t0 = time.perf_counter()
         ttfa_ms, n_samples, cancelled, index = None, 0, False, 0
         pause, tail = 0, ""  # nghỉ trước câu kế tiếp (theo câu vừa đọc); đuôi mẩu text trước, để thấy chuyển đoạn
         await self.send(P.speak_start(speak_id))
         try:
             while (text := await queue.get()) is not None:
-                pause = max(pause, self.tts.seam_pause(tail, text))
+                pause = max(pause, tts.seam_pause(tail, text))
                 tail = (tail + text)[-16:]
-                segs = await asyncio.to_thread(self.tts.plan, text)
+                segs = await asyncio.to_thread(tts.plan, text)
                 if not segs:
                     continue
                 await self.send(P.speak_more(speak_id, [{"text": s.text, "source": s.source, "lang": s.lang}
@@ -694,7 +742,7 @@ class Session:
                         await self.send(P.speak_sentence(speak_id, index, pause if index else 0))
                         pause = seg.pause_ms
                         index += 1
-                        it = self.tts.stream(seg)
+                        it = tts.stream(seg)
                         try:
                             while True:
                                 job = asyncio.ensure_future(asyncio.to_thread(next, it, None))
@@ -718,7 +766,7 @@ class Session:
             log.exception("TTS lỗi")
             await self.send(P.error(ErrorCode.TTS_FAILED, str(e)))
             cancelled = True
-        synth_ms, audio_ms = round((time.perf_counter() - t0) * 1000), round(n_samples * 1000 / self.tts.sample_rate)
+        synth_ms, audio_ms = round((time.perf_counter() - t0) * 1000), round(n_samples * 1000 / tts.sample_rate)
         await self.send(P.speak_end(speak_id, cancelled, ttfa_ms, synth_ms, audio_ms))
         if on_end:
             await on_end(cancelled, ttfa_ms, synth_ms, audio_ms)

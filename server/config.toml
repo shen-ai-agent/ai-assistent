@@ -8,9 +8,12 @@ port = 8765
 lan_port = 8766
 # Máy chạy nhiều app thì TTS bị chen CPU, giọng giật: high giảm số lần hụt audio 91 -> 14 (normal / above_normal / high)
 priority = "high"
+# Lựa chọn ở tab Cài đặt của web (model giọng đọc...), ghi đè các khoá tương ứng trong file này
+settings_file = "_local/settings.json"
 
 [stt]
 # Chọn theo benchmark Phase 1 (_local/stt_report.md)
+engine = "whisper"        # server/stt/engines; whisper dùng các khoá bên dưới, engine khác dùng bảng [stt.<engine>]
 model = "large-v3"
 compute_type = "int8_float16"
 device = "cuda"
@@ -21,18 +24,41 @@ min_speech_ms = 200       # VAD thấy ít tiếng nói hơn thì bỏ qua lư�
 max_audio_s = 120         # dài hơn thì cắt, tránh giữ phím quên thả
 
 [tts]
-# Chọn theo benchmark Phase 3 (_local/tts_report.md)
 enabled = true
+engine = "zerotts"        # bảng [tts.<engine>] bên dưới; engine có `python` thì chạy trong worker riêng (Phase 10).
+                          # Đổi ở tab Cài đặt của web thì lựa chọn đó lưu vào settings_file, ghi đè dòng này
+loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
+pause_scale = 1.0         # nhân khoảng nghỉ sau câu/câu hỏi/chuyển đoạn (normalize.PAUSES); 0 = chỉ còn lặng sẵn của model
+
+[tts.zerotts]
+label = "ZeroTTS"         # tên hiện ở tab Cài đặt
+# Chọn theo benchmark Phase 3 (_local/tts_report.md)
 voice = "maichi"          # baotrang giahuy hamy huuduc kimoanh maichi quangminh tiendat
 device = "cuda"           # cần onnxruntime-gpu 1.23.2 (xem README); "cpu" thì RTF ~1, dễ khựng
 threads = 4
-loanwords = false         # true: dùng cả phiên âm từ tiếng Anh (dòng ~ trong data/lexicon.tsv)
-pause_scale = 1.0         # nhân khoảng nghỉ sau câu/câu hỏi/chuyển đoạn (normalize.PAUSES); 0 = chỉ còn lặng sẵn của model
 first_chunk_frames = 2    # mẩu 160ms từ đầu: không giật ở bench không STT (_local/tts_chunk)
 max_chunk_frames = 2
 cuda_graph = true         # local_frame_decode chạy CUDA Graph: bớt việc CPU, audio trùng bản gốc (server/tts/zerotts_gpu.py)
 temperature = 0.8         # audio_temperature: thấp thì giọng đều hơn giữa các câu (bench/tts_consistency.py)
 cfg_scale = 1.5           # tạm: giọng đều hơn giữa các câu (_local/tts_consistency); > 1 tốn gấp đôi mỗi frame, không chạy CUDA Graph
+
+[tts.vieneu]
+label = "VieNeu-TTS"
+# VieNeu-TTS v3 Turbo, venv riêng: server tự chạy `python -m server.tts.worker --engine vieneu` bằng python này
+python = "_local/venvs/vieneu/Scripts/python.exe"
+device = "cuda"
+voice = ""                # rỗng = giọng mặc định; danh sách giọng in trong log worker
+# url = "http://127.0.0.1:8790"   # thay cho python: nối tới worker đã chạy tay
+
+[tts.omnivoice]
+label = "OmniVoice"
+# OmniVoice tiếng Việt, không stream (cả câu xong mới có tiếng), clone giọng từ file mẫu
+python = "_local/venvs/omnivoice/Scripts/python.exe"
+ref = "_local/tts/vieneu/c01.wav"
+# Lời của file mẫu (đoạn c01 trong bench/tts_samples.txt). Bỏ trống thì mỗi lần nạp model phải tải và chạy
+# Whisper để nhận dạng file mẫu (CPU: nạp mất ~2 phút)
+ref_text = "Chào bạn, hôm nay mình ôn lại phần mạng trước nhé. Bạn còn nhớ subnet công khai khác subnet riêng ở điểm nào không?"
+steps = 16
 
 [bridge]
 # claude_cli: gọi `claude -p` (Claude Code, dùng gói subscription đã đăng nhập), giữ ngữ cảnh bằng --resume
